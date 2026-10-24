@@ -465,8 +465,19 @@ function openHostWindow() {
   console.log('Открываю окно трансляции…');
 }
 
+// Адреса Tailscale (100.64.0.0/10): по ним телефон достаёт до ПК через интернет, из любой страны.
+function tailscaleAddresses() {
+  const list = [];
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if ((a.family === 'IPv4' || a.family === 4) && /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address)) list.push(a.address);
+    }
+  }
+  return list;
+}
+
 function clientUrls() {
-  return lanAddresses().map((ip) => `https://${ip}:${HTTPS_PORT}/`);
+  return [...lanAddresses(), ...tailscaleAddresses()].map((ip) => `https://${ip}:${HTTPS_PORT}/`);
 }
 
 // ---------- Запуск ----------
@@ -565,10 +576,11 @@ function printBanner() {
   console.log('');
   console.log('  PIN-код для подключения:  ' + config.pin.slice(0, 3) + ' ' + config.pin.slice(3));
   console.log('');
+  const ts = tailscaleAddresses();
   if (urls.length) {
     console.log('  Открой на телефоне, планшете или ноутбуке');
     console.log('  (устройство должно быть в той же сети Wi-Fi):');
-    for (const u of urls) console.log('     ' + u);
+    for (const ip of lanAddresses()) console.log(`     https://${ip}:${HTTPS_PORT}/`);
     console.log('  Если iPhone ругается на https, попробуй:');
     for (const ip of lanAddresses()) console.log(`     http://${ip}:${HTTP_PORT}/`);
     try {
@@ -577,6 +589,13 @@ function printBanner() {
     } catch { /* без QR */ }
   } else {
     console.log('  Компьютер не подключён к сети.');
+  }
+  console.log('');
+  if (ts.length) {
+    console.log('  Из другого города или страны (через Tailscale):');
+    for (const ip of ts) console.log(`     https://${ip}:${HTTPS_PORT}/`);
+  } else {
+    console.log('  Чтобы играть не из дома, установи Tailscale: https://tailscale.com/download');
   }
   console.log('');
   console.log('  Ретро-игры для телефона клади в папку:');

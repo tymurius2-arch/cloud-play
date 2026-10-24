@@ -173,6 +173,7 @@
 
     <div id="importBox" class="note hidden"><span id="importText"></span><div class="bar"><div id="importBar"></div></div></div>
 
+    <div class="note" style="margin:0 0 16px">✈️ <b>Перед поездкой:</b> пока есть интернет, открой каждую игру один раз на несколько секунд. Тогда на плитке появится «без интернета», и игра пойдёт даже в самолёте.</div>
     <div class="grid" id="retroGrid"></div>
     <p id="retroEmpty" class="muted">Здесь пока пусто. Добавь первую игру кнопкой выше.</p>
 
@@ -253,7 +254,18 @@
       <li>Браузер скажет, что сайт «небезопасный»: нажми <b>«Дополнительно» → «Перейти на сайт»</b>. Это нормально, сертификат твой собственный.</li>
       <li>Введи PIN, выбери игру из Steam и играй!</li>
     </ol>
-    <div class="note">Совет: в играх ставь режим экрана <b>«Оконный без рамки»</b> (Borderless). Чтобы играть не дома, установи <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> на ПК и телефон.</div>
+    <div class="note">Совет: в играх ставь режим экрана <b>«Оконный без рамки»</b> (Borderless).</div>
+
+    <h2>Играть с домашнего ПК из другой страны</h2>
+    <p class="muted">Компьютер остаётся дома включённым, а ты играешь через интернет откуда угодно.</p>
+    <ol class="steps">
+      <li>Установи <b>Tailscale</b> на компьютер и на телефон: <a href="https://tailscale.com/download" target="_blank" rel="noopener">tailscale.com/download</a>. Войди в обоих в <b>один и тот же</b> аккаунт (например Google).</li>
+      <li>На компьютере: Параметры → Система → Питание → <b>«Переводить в спящий режим: Никогда»</b>.</li>
+      <li>Запусти <b>start.bat</b> и не закрывай. В окне появится строка «Из другого города или страны» с адресом <code>https://100.…</code>. Сфотографируй её.</li>
+      <li>В поездке включи Tailscale на телефоне и введи этот адрес вверху страницы (или открой его в Safari).</li>
+      <li>В настройках ⚙️ выбери качество <b>«Мобильный интернет»</b>: это примерно 1 ГБ трафика в час. На Wi-Fi в отеле можно поставить выше.</li>
+    </ol>
+    <div class="note">Если дома выключат свет или Windows перезагрузится для обновления, Cloud Play закроется. Тогда до возвращения играй во встроенные и ретро-игры.</div>
   </section>
 </main>
 
@@ -384,7 +396,8 @@ async function renderRetro() {
   for (const r of list) {
     const sys = SYS[r.system] || { name: r.system, emoji: '🎮', color: '#334155' };
     const t = tile({ id: r.id, name: r.name, sub: `${sys.name} · ${fmtSize(r.size)}`, emoji: sys.emoji,
-      bg: `linear-gradient(160deg, ${sys.color}, #0b0f1e 90%)` }, () => openGame('games/retro/play.html?id=' + encodeURIComponent(r.id), { landscape: true }));
+      bg: `linear-gradient(160deg, ${sys.color}, #0b0f1e 90%)` }, () => openGame('games/retro/play.html?id=' + encodeURIComponent(r.id), { landscape: true }),
+      r.lastPlayed ? '✈️ без интернета' : '🌐 1-й запуск с интернетом');
     const del = document.createElement('span');
     del.className = 'del'; del.textContent = '🗑'; del.title = 'Удалить';
     del.style.cssText = 'display:grid;place-items:center;cursor:pointer';
