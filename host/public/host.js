@@ -37,6 +37,7 @@ function connect() {
   ws.onclose = () => {
     setStatus('Нет связи с сервером. Переподключаюсь…');
     closePeer();
+    stopFallback();
     setTimeout(connect, 1500);
   };
 }
@@ -70,7 +71,16 @@ async function handle(m) {
       break;
     case 'stop':
       closePeer();
+      stopFallback();
       setStatus('Готов. Жду подключения устройства', 'ok');
+      break;
+    case 'fallback':
+      settings = Object.assign(settings, m.settings || {});
+      closePeer();
+      await startFallback();
+      break;
+    case 'keyframe':
+      if (wsv) wsv.keyframe();
       break;
   }
 }
@@ -222,6 +232,7 @@ function fastStart(sdp) {
 
 async function startSession() {
   closePeer();
+  stopFallback();
   setStatus('Включаю показ экрана…');
   const s = await getStream();
 
@@ -246,6 +257,113 @@ async function startSession() {
   await applyEncoding();
   send({ type: 'offer', sdp: pc.localDescription.sdp });
   setStatus('Соединяюсь с устройством…');
+}
+
+// ---------- Запасной режим ----------
+// Если прямое видео (WebRTC по UDP) не проходит через брандмауэр или роутер,
+// сжимаем экран сами (WebCodecs) и шлём кадры через то же соединение, что и управление.
+let wsv = null;
+
+function stopFallback() {
+  if (wsv) { wsv.stop(); wsv = null; }
+}
+
+async function pickEncoderConfig(w, h, fps, bitrate) {
+  const base = { width: w, height: h, framerate: fps, bitrate, latencyMode: 'realtime' };
+  const options = [
+    { ...base, codec: 'avc1.42E033', avc: { format: 'annexb' }, hardwareAcceleration: 'prefer-hardware' },
+    { ...base, codec: 'avc1.42E033', avc: { format: 'annexb' } },
+    { ...base, codec: 'avc1.42E02A', avc: { format: 'annexb' } },
+    { ...base, codec: 'vp8' },
+  ];
+  for (const c of options) {
+    try { if ((await VideoEncoder.isConfigSupported(c)).supported) return c; } catch { /* пробуем следующий */ }
+  }
+  return null;
+}
+
+async function startFallback() {
+  stopFallback();
+  if (!('VideoEncoder' in window) || !('MediaStreamTrackProcessor' in window)) {
+    send({ type: 'wsv-error', text: 'Браузер на компьютере слишком старый для запасного режима. Обнови Chrome или Edge.' });
+    return;
+  }
+  const s = await getStream();
+  const track = s.getVideoTracks()[0].clone();
+  const st = track.getSettings();
+  let w = st.width || 1280;
+  let h = st.height || 720;
+  const maxH = Math.min(Number(settings.maxHeight) || 1080, 1080);
+  if (h > maxH) { w = Math.round((w * maxH) / h); h = maxH; }
+  w -= w % 2; h -= h % 2;
+  const fps = Number(settings.fps) || 60;
+  const bitrate = Math.min(Number(settings.bitrate) || 20, 15) * 1e6;
+  const cfg = await pickEncoderConfig(w, h, fps, bitrate);
+  if (!cfg) {
+    track.stop();
+    send({ type: 'wsv-error', text: 'На компьютере не нашлось подходящего видеокодека.' });
+    return;
+  }
+
+  let running = true;
+  let forceKey = true;
+  let lastKey = 0;
+  let lastFrame = 0;
+  let canvas = null;
+  let ctx = null;
+  const encoder = new VideoEncoder({
+    output: (chunk) => {
+      if (!ws || ws.readyState !== 1) return;
+      const buf = new Uint8Array(chunk.byteLength + 9);
+      buf[0] = chunk.type === 'key' ? 1 : 0;
+      new DataView(buf.buffer).setFloat64(1, chunk.timestamp);
+      chunk.copyTo(buf.subarray(9));
+      ws.send(buf);
+    },
+    error: (e) => {
+      send({ type: 'wsv-error', text: 'Ошибка сжатия видео на компьютере: ' + e.message });
+      stopFallback();
+    },
+  });
+  encoder.configure(cfg);
+  const reader = new MediaStreamTrackProcessor({ track, maxBufferSize: 1 }).readable.getReader();
+  wsv = {
+    stop() {
+      running = false;
+      try { reader.cancel(); } catch { /* уже */ }
+      try { track.stop(); } catch { /* уже */ }
+      try { if (encoder.state !== 'closed') encoder.close(); } catch { /* уже */ }
+    },
+    keyframe() { forceKey = true; },
+  };
+  send({ type: 'wsv-config', codec: cfg.codec, width: w, height: h });
+  setStatus('Идёт трансляция (запасной режим)', 'live', 'Видео идёт через основное соединение.');
+
+  const gap = 1000 / fps - 3;
+  while (running) {
+    let res;
+    try { res = await reader.read(); } catch { break; }
+    const frame = res.value;
+    if (res.done || !frame) break;
+    const now = performance.now();
+    // Не копим очередь: если сеть или кодировщик не успевают, кадр пропускаем.
+    if (!running || encoder.state !== 'configured' || encoder.encodeQueueSize > 2 || ws.bufferedAmount > 400000 || now - lastFrame < gap) {
+      frame.close();
+      continue;
+    }
+    let out = frame;
+    if (frame.displayWidth !== w || frame.displayHeight !== h) {
+      if (!canvas) { canvas = new OffscreenCanvas(w, h); ctx = canvas.getContext('2d'); }
+      ctx.drawImage(frame, 0, 0, w, h);
+      out = new VideoFrame(canvas, { timestamp: frame.timestamp });
+      frame.close();
+    }
+    const key = forceKey || now - lastKey > 3000;
+    if (key) { forceKey = false; lastKey = now; }
+    try { encoder.encode(out, { keyFrame: key }); } catch (e) { console.warn(e); }
+    out.close();
+    lastFrame = now;
+  }
 }
 
 connect();

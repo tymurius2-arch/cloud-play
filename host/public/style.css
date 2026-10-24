@@ -62,7 +62,7 @@ h2 { margin: 18px 0 12px; font-size: 18px; }
 
 /* ---------- Игра ---------- */
 #stream { position: fixed; inset: 0; background: #000; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
-#video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+#video, #wsvCanvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 #touchLayer { position: absolute; inset: 0; }
 #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); text-align: center; padding: 24px; pointer-events: none; }
 .spinner { width: 46px; height: 46px; border-radius: 50%; border: 4px solid #ffffff22; border-top-color: var(--accent); animation: spin 1s linear infinite; }

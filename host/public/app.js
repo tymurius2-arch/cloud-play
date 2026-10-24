@@ -49,8 +49,10 @@ function send(msg) {
 function connect(pin) {
   if (ws) { ws.onclose = null; try { ws.close(); } catch { /* закрыт */ } }
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
   ws.onopen = () => send({ type: 'hello', role: 'client', pin });
   ws.onmessage = (e) => {
+    if (typeof e.data !== 'string') { onVideoChunk(e.data); return; }
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
     onMessage(m, pin).catch((err) => { console.error(err); toast('Ошибка: ' + err.message); });
@@ -115,6 +117,12 @@ async function onMessage(m, pin) {
       break;
     case 'pong':
       rtt = performance.now() - m.t;
+      break;
+    case 'wsv-config':
+      if (streaming) setupDecoder(m);
+      break;
+    case 'wsv-error':
+      if (streaming) loading(m.text);
       break;
   }
 }
@@ -244,6 +252,7 @@ function startStream(game) {
     toast('Запускаю ' + game.name + '…');
   }
   streaming = true;
+  stopWsv();
   show('stream');
   $('menu').classList.add('hidden');
   loading(game ? `Запускаю «${game.name}»…` : 'Подключаюсь к компьютеру…');
@@ -260,6 +269,7 @@ function leaveStream(sendStop = true) {
   if (sendStop) send({ type: 'stop' });
   releaseAllLocal();
   closePc();
+  stopWsv();
   streaming = false;
   video.srcObject = null;
   $('soundBtn').classList.add('hidden');
@@ -285,6 +295,98 @@ function playVideo() {
 $('soundBtn').onclick = () => { video.muted = false; video.play().catch(() => {}); $('soundBtn').classList.add('hidden'); };
 video.addEventListener('playing', () => { if (pc && pc.connectionState === 'connected') loading(false); });
 
+// ---------- Запасной режим ----------
+// Если прямое видео (WebRTC) не дошло за несколько секунд, просим компьютер слать
+// сжатые кадры через то же соединение, что и управление, и рисуем их сами.
+const wsvCanvas = $('wsvCanvas');
+const wsvCtx = wsvCanvas.getContext('2d');
+let wsvMode = false;
+let wsvTimer = 0;
+let decoder = null;
+let decoderCfg = null;
+let gotKey = false;
+const wsvStats = { frames: 0, bytes: 0 };
+
+function videoArrived() {
+  return video.videoWidth > 0 && video.readyState >= 2 && !video.paused;
+}
+function armFallback(ms) {
+  clearTimeout(wsvTimer);
+  wsvTimer = setTimeout(() => {
+    if (streaming && !wsvMode && !videoArrived()) startWsv();
+  }, ms);
+}
+function startWsv() {
+  if (!('VideoDecoder' in window)) {
+    loading('Видео не проходит напрямую, а этот браузер не умеет запасной режим. Обнови iOS / браузер или попробуй Chrome.');
+    return;
+  }
+  clearTimeout(wsvTimer);
+  closePc();
+  wsvMode = true;
+  loading('Включаю запасной режим видео…');
+  send({ type: 'fallback', settings: streamSettings() });
+}
+function stopWsv() {
+  clearTimeout(wsvTimer);
+  wsvMode = false;
+  gotKey = false;
+  if (decoder) { try { decoder.close(); } catch { /* уже */ } }
+  decoder = null;
+  wsvCanvas.classList.add('hidden');
+  video.classList.remove('hidden');
+}
+function makeDecoder() {
+  decoder = new VideoDecoder({
+    output: (frame) => {
+      if (wsvCanvas.width !== frame.displayWidth || wsvCanvas.height !== frame.displayHeight) {
+        wsvCanvas.width = frame.displayWidth; wsvCanvas.height = frame.displayHeight;
+      }
+      wsvCtx.drawImage(frame, 0, 0);
+      frame.close();
+      wsvStats.frames++;
+      if (!$('loading').classList.contains('hidden')) loading(false);
+    },
+    error: (e) => {
+      console.warn('decoder', e);
+      gotKey = false;
+      send({ type: 'keyframe' });
+      setTimeout(() => { if (wsvMode && decoderCfg) makeDecoder(); }, 50);
+    },
+  });
+  decoder.configure(decoderCfg);
+}
+function setupDecoder(m) {
+  wsvMode = true;
+  gotKey = false;
+  decoderCfg = { codec: m.codec, optimizeForLatency: true };
+  if (decoder) { try { decoder.close(); } catch { /* уже */ } }
+  makeDecoder();
+  wsvCanvas.width = m.width; wsvCanvas.height = m.height;
+  wsvCanvas.classList.remove('hidden');
+  video.classList.add('hidden');
+  loading('Запасной режим: жду картинку… (без звука)');
+  toast('Видео идёт в запасном режиме, без звука', 4000);
+}
+function onVideoChunk(buf) {
+  if (!wsvMode || !decoder || decoder.state !== 'configured') return;
+  const u = new Uint8Array(buf);
+  const key = u[0] === 1;
+  if (!gotKey && !key) return;
+  if (decoder.decodeQueueSize > 6) {
+    // Телефон не успевает: ждём следующий ключевой кадр.
+    gotKey = false;
+    send({ type: 'keyframe' });
+    return;
+  }
+  gotKey = true;
+  wsvStats.bytes += u.length;
+  const ts = new DataView(buf).getFloat64(1);
+  try {
+    decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: ts, data: u.subarray(9) }));
+  } catch (e) { console.warn(e); gotKey = false; }
+}
+
 async function onOffer(sdp) {
   if (!streaming) return;
   closePc();
@@ -302,7 +404,7 @@ async function onOffer(sdp) {
     if (pc !== myPc) return;
     const st = pc.connectionState;
     if (st === 'connected') { loading(false); playVideo(); }
-    else if (st === 'failed') loading('Не удалось соединиться. Проверь, что телефон и компьютер в одной сети Wi-Fi, и выйди/зайди снова.');
+    else if (st === 'failed') startWsv();
     else if (st === 'disconnected') loading('Соединение прервалось. Жду…');
   };
   await pc.setRemoteDescription({ type: 'offer', sdp });
@@ -311,6 +413,7 @@ async function onOffer(sdp) {
   await pc.setLocalDescription(answer);
   send({ type: 'answer', sdp: pc.localDescription.sdp });
   loading('Соединяюсь…');
+  armFallback(settings.forceFallback ? 0 : 6000);
 }
 
 function applyStreamUI() {
@@ -343,9 +446,10 @@ function moveRel(dx, dy) {
   if (ix || iy) sendInput({ a: 'm', x: ix, y: iy });
 }
 function videoPoint(cx, cy) {
-  const r = video.getBoundingClientRect();
-  const vw = video.videoWidth || 16;
-  const vh = video.videoHeight || 9;
+  const el = wsvMode ? wsvCanvas : video;
+  const r = el.getBoundingClientRect();
+  const vw = (wsvMode ? wsvCanvas.width : video.videoWidth) || 16;
+  const vh = (wsvMode ? wsvCanvas.height : video.videoHeight) || 9;
   const k = Math.min(r.width / vw, r.height / vh);
   const w = vw * k;
   const h = vh * k;
@@ -743,6 +847,7 @@ $('menu').addEventListener('click', (e) => {
     case 'alttab': close(); combo(['AltLeft', 'Tab']); break;
     case 'win': close(); tapKey('MetaLeft'); break;
     case 'fullscreen': close(); enterFullscreen(); break;
+    case 'fallback': close(); if (!wsvMode) startWsv(); break;
     case 'stats': settings.stats = !settings.stats; saveSettings(); applyStreamUI(); close(); break;
     case 'altf4':
       if (confirm('Закрыть игру на компьютере (Alt+F4)?')) { close(); combo(['AltLeft', 'F4']); }
@@ -755,6 +860,14 @@ $('menu').addEventListener('click', (e) => {
 let lastBytes = 0;
 let lastTs = 0;
 setInterval(async () => {
+  if (streaming && settings.stats && wsvMode) {
+    $('stats').textContent = [
+      `${wsvCanvas.width}×${wsvCanvas.height}  ${wsvStats.frames} FPS  (запасной режим)`,
+      `${(wsvStats.bytes * 8 / 1e6).toFixed(1)} Мбит/с  ${decoderCfg ? decoderCfg.codec : ''}`,
+      `сеть ${rtt.toFixed(0)} мс`,
+    ].join('\n');
+  }
+  wsvStats.frames = 0; wsvStats.bytes = 0;
   if (!streaming || !settings.stats || !pc) return;
   let stats;
   try { stats = await pc.getStats(); } catch { return; }

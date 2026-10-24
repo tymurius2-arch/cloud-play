@@ -100,6 +100,7 @@
 <!-- Игра -->
 <section id="stream" class="screen hidden">
   <video id="video" playsinline autoplay></video>
+  <canvas id="wsvCanvas" class="hidden"></canvas>
   <div id="touchLayer"></div>
   <div id="loading"><div class="spinner"></div><div id="loadingText">Подключаюсь…</div></div>
   <div id="stats" class="hidden"></div>
@@ -138,6 +139,7 @@
     <button data-act="win">⊞ Win</button>
     <button data-act="fullscreen">⛶ Во весь экран</button>
     <button data-act="stats">📊 Задержка и FPS</button>
+    <button data-act="fallback">🔁 Нет картинки? Запасной режим</button>
     <button data-act="altf4" class="danger">✖ Закрыть игру (Alt+F4)</button>
     <button data-act="exit" class="danger">⏏ Выйти в библиотеку</button>
   </div>

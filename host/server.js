@@ -245,9 +245,35 @@ function onHostMessage(ws, m) {
     case 'ice':
     case 'host-error':
     case 'host-status':
+    case 'wsv-config':
+    case 'wsv-error':
       send(activeClient, m);
       break;
   }
+}
+
+// iPhone и Android прячут свой адрес в WebRTC за именем вида «abc.local».
+// Компьютер часто не может его разгадать, и видео не доходит. Подставляем настоящий адрес телефона.
+function revealClientIp(ws, text) {
+  if (!ws.remoteIp || !/^\d+\.\d+\.\d+\.\d+$/.test(ws.remoteIp) || typeof text !== 'string') return text;
+  return text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.local/gi, ws.remoteIp);
+}
+
+// Запасной режим: видео идёт через то же соединение, что и управление.
+let needKeyframe = true;
+function relayVideo(buf) {
+  const c = activeClient;
+  if (!c || c.readyState !== 1) return;
+  const isKey = buf[0] === 1;
+  if (needKeyframe && !isKey) return;
+  if (c.bufferedAmount > 1500000) {
+    // Сеть не успевает: пропускаем кадры до следующего ключевого.
+    if (!needKeyframe) send(hostWs, { type: 'keyframe' });
+    needKeyframe = true;
+    return;
+  }
+  if (isKey) needKeyframe = false;
+  c.send(buf, { binary: true });
 }
 
 function onClientMessage(ws, m) {
@@ -278,9 +304,25 @@ function onClientMessage(ws, m) {
       break;
     }
     case 'answer':
+      if (ws === activeClient) send(hostWs, { ...m, sdp: revealClientIp(ws, m.sdp) });
+      break;
     case 'ice':
+      if (ws === activeClient && m.candidate) {
+        send(hostWs, { ...m, candidate: { ...m.candidate, candidate: revealClientIp(ws, m.candidate.candidate) } });
+      }
+      break;
     case 'settings':
       if (ws === activeClient) send(hostWs, m);
+      break;
+    case 'fallback':
+      if (ws === activeClient) {
+        console.log('Видео не прошло напрямую, включаю запасной режим через основное соединение.');
+        needKeyframe = true;
+        send(hostWs, { type: 'fallback', settings: m.settings || {} });
+      }
+      break;
+    case 'keyframe':
+      if (ws === activeClient) { needKeyframe = true; send(hostWs, { type: 'keyframe' }); }
       break;
     case 'stop':
       if (ws === activeClient) stopSession();
@@ -296,12 +338,17 @@ function onClientMessage(ws, m) {
 
 function onConnection(ws, req) {
   const ip = req.socket.remoteAddress || '';
+  ws.remoteIp = ip.replace(/^::ffff:/, '');
   ws.role = null;
   ws.pressed = new Set();
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
-  ws.on('message', (buf) => {
+  ws.on('message', (buf, isBinary) => {
+    if (isBinary) {
+      if (ws.role === 'host') relayVideo(buf);
+      return;
+    }
     let m;
     try { m = JSON.parse(buf); } catch { return; }
     if (!m || typeof m !== 'object') return;
@@ -430,7 +477,7 @@ function main() {
 
   const httpsServer = https.createServer(tls, handleRequest);
   const httpServer = http.createServer(handleRequest);
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024, perMessageDeflate: false });
   wss.on('connection', onConnection);
   for (const srv of [httpsServer, httpServer]) {
     srv.on('upgrade', (req, socket, head) => {
