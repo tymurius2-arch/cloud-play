@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ночная трасса</title>
+<link rel="stylesheet" href="../shared/game.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud"><span id="time"></span><span id="speed" class="muted"></span><span id="dist"></span></div>
+<div class="overlay" id="menu">
+  <h1>Ночная трасса</h1>
+  <p>Гони по ночному шоссе, обгоняй машины и успевай к контрольным точкам, пока не кончилось время.</p>
+  <p class="keys" id="howto"></p>
+  <button id="play">Поехали</button>
+  <p id="best"></p>
+</div>
+<script src="../shared/pad.js"></script>
+<script>
+'use strict';
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+Pad.init({
+  left: true,
+  buttons: [
+    { id: 'nitro', label: '🔥', keys: ['Space', 'ShiftLeft'], gp: [0, 7, 5] },
+    { id: 'brake', label: '⏹', keys: ['ArrowDown', 'KeyS'], gp: [1, 6, 2], small: true },
+    { id: 'pause', keys: ['Escape', 'KeyP'], gp: [9], touch: false },
+  ],
+  keys: { lx: [['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']] },
+});
+document.getElementById('howto').textContent = Pad.isTouch
+  ? 'Палец слева — руль. 🔥 — нитро, ⏹ — тормоз. Газ жмётся сам.'
+  : '← → или A D — руль, пробел — нитро, ↓ — тормоз. Можно с геймпадом.';
+
+// ---------- Трасса ----------
+const SEG = 200, ROAD_W = 2000, RUMBLE = 3, LANES = 3, DRAW = 220;
+const CAM_H = 1000, CAM_DEPTH = 1 / Math.tan((100 / 2) * Math.PI / 180);
+const PLAYER_Z = CAM_H * CAM_DEPTH;
+const MAX_SPEED = SEG / (1 / 60);
+const ACCEL = MAX_SPEED / 6, BRAKE = -MAX_SPEED, DECEL = -MAX_SPEED / 5;
+const OFF_DECEL = -MAX_SPEED / 2, OFF_LIMIT = MAX_SPEED / 4, CENTRIFUGAL = 0.3;
+const CAR_W = 0.3;
+
+let segs = [], trackLen = 0, cars = [];
+const easeIn = (a, b, p) => a + (b - a) * p * p;
+const easeInOut = (a, b, p) => a + (b - a) * (-Math.cos(p * Math.PI) / 2 + 0.5);
+const lastY = () => (segs.length ? segs[segs.length - 1].p2.wy : 0);
+
+function addSeg(curve, y) {
+  const n = segs.length;
+  segs.push({
+    i: n, curve, sprites: [], cars: [],
+    p1: { wy: lastY(), wz: n * SEG }, p2: { wy: y, wz: (n + 1) * SEG },
+    dark: Math.floor(n / RUMBLE) % 2,
+  });
+}
+function addRoad(enter, hold, leave, curve, y) {
+  const sy = lastY(), ey = sy + y * SEG, total = enter + hold + leave;
+  for (let n = 0; n < enter; n++) addSeg(easeIn(0, curve, n / enter), easeInOut(sy, ey, n / total));
+  for (let n = 0; n < hold; n++) addSeg(curve, easeInOut(sy, ey, (enter + n) / total));
+  for (let n = 0; n < leave; n++) addSeg(easeInOut(curve, 0, n / leave), easeInOut(sy, ey, (enter + hold + n) / total));
+}
+function build() {
+  segs = [];
+  addRoad(50, 50, 50, 0, 0);
+  addRoad(50, 50, 50, 2, 20);
+  addRoad(50, 50, 50, 0, -20);
+  addRoad(50, 100, 50, -4, 0);
+  addRoad(100, 100, 100, 0, 40);
+  addRoad(50, 50, 50, 3, -40);
+  for (let i = 0; i < 3; i++) { addRoad(40, 40, 40, -3, 10); addRoad(40, 40, 40, 3, -10); }
+  addRoad(100, 100, 100, 0, 0);
+  addRoad(50, 100, 50, 5, 30);
+  addRoad(50, 50, 50, -2, -30);
+  addRoad(100, 150, 100, -4, 20);
+  addRoad(100, 100, 100, 2, -20);
+  addRoad(100, 100, 100, 0, -lastY() / SEG);
+  trackLen = segs.length * SEG;
+  // Придорожные объекты
+  for (let i = 20; i < segs.length; i += 4 + Math.floor(Math.random() * 6)) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const kind = Math.random() < 0.55 ? 'palm' : Math.random() < 0.6 ? 'lamp' : 'sign';
+    segs[i].sprites.push({ kind, offset: side * (1.3 + Math.random() * 1.6), w: kind === 'palm' ? 0.9 : kind === 'lamp' ? 0.25 : 0.7 });
+  }
+  for (let i = 0; i < segs.length; i += 12) {
+    segs[i].sprites.push({ kind: 'lamp', offset: -1.15, w: 0.25 }, { kind: 'lamp', offset: 1.15, w: 0.25 });
+  }
+  // Машины
+  cars = [];
+  const COLORS = ['#f472b6', '#facc15', '#34d399', '#60a5fa', '#fb923c', '#e879f9'];
+  for (let n = 0; n < 60; n++) {
+    const lane = Math.floor(Math.random() * 3) - 1;
+    const car = {
+      offset: lane * 0.66 + (Math.random() - 0.5) * 0.1,
+      z: (300 + Math.random() * (segs.length - 300)) * SEG,
+      speed: MAX_SPEED * (0.25 + Math.random() * 0.3),
+      color: COLORS[n % COLORS.length], truck: Math.random() < 0.2,
+    };
+    findSeg(car.z).cars.push(car);
+    cars.push(car);
+  }
+}
+const findSeg = (z) => segs[Math.floor(z / SEG) % segs.length];
+
+// ---------- Состояние ----------
+let state = 'menu', pos = 0, playerX = 0, speed = 0, timeLeft = 0, dist = 0, nitro = 1, checkpoint = 0;
+let skyOffset = 0, crashT = 0, msg = null, steer = 0;
+const CHECK_EVERY = () => trackLen / 3;
+
+function reset() {
+  build();
+  pos = 0; playerX = 0; speed = 0; timeLeft = 35; dist = 0; nitro = 1; checkpoint = 1; skyOffset = 0;
+  msg = { text: 'Старт!', t: 1.5 };
+}
+document.getElementById('play').onclick = () => {
+  reset(); state = 'play';
+  document.getElementById('menu').classList.add('hidden');
+};
+function showBest() { const b = Best.get('racer'); document.getElementById('best').textContent = b ? `Рекорд: ${(b / 1000).toFixed(1)} км` : ''; }
+showBest();
+
+function gameOver() {
+  state = 'over';
+  const meters = Math.floor(dist / 100);
+  Best.set('racer', meters);
+  Sfx.tone(300, 0.9, 'sawtooth', 0.07, 60);
+  const m = document.getElementById('menu');
+  m.querySelector('h1').textContent = 'Время вышло';
+  m.querySelector('p').innerHTML = `<span class="big">${(meters / 1000).toFixed(2)} км</span>`;
+  document.getElementById('play').textContent = 'Ещё заезд';
+  showBest();
+  m.classList.remove('hidden');
+}
+
+const overlap = (x1, w1, x2, w2) => Math.abs(x1 - x2) < (w1 + w2) / 2;
+
+function update(dt) {
+  Pad.update();
+  if (state === 'play' && Pad.pressed('pause')) { state = 'pause'; msg = { text: 'Пауза', t: 1e9 }; return; }
+  if (state === 'pause') { if (Pad.pressed('pause') || Pad.pressed('nitro')) { state = 'play'; msg = null; } return; }
+  if (state !== 'play') {
+    if (Pad.pressed('nitro') && !document.getElementById('menu').classList.contains('hidden')) document.getElementById('play').click();
+    return;
+  }
+  const pSeg = findSeg(pos + PLAYER_Z);
+  const sp = speed / MAX_SPEED;
+  const dx = dt * 2 * sp;
+  const boosting = Pad.down('nitro') && nitro > 0 && !crashT;
+  const top = boosting ? MAX_SPEED * 1.35 : MAX_SPEED;
+
+  steer += (Pad.axis('lx') - steer) * Math.min(1, dt * 10);
+  playerX += steer * dx * 1.25;
+  playerX -= dx * sp * pSeg.curve * CENTRIFUGAL;
+
+  if (Pad.down('brake')) speed += BRAKE * dt;
+  else if (speed < top) speed += (boosting ? ACCEL * 2 : ACCEL) * dt;
+  else speed += DECEL * dt;
+  if (boosting) { nitro = Math.max(0, nitro - dt / 3); }
+  else nitro = Math.min(1, nitro + dt / 18);
+
+  if ((playerX < -1 || playerX > 1)) {
+    if (speed > OFF_LIMIT) speed += OFF_DECEL * dt;
+    for (const s of pSeg.sprites) {
+      if (s.kind !== 'lamp' && overlap(playerX, CAR_W, s.offset, s.w * 0.6)) {
+        speed = MAX_SPEED / 6; crashT = 0.5; Sfx.noise(0.3, 0.25);
+        break;
+      }
+    }
+  }
+  for (const c of pSeg.cars) {
+    if (speed > c.speed && overlap(playerX, CAR_W, c.offset, CAR_W * (c.truck ? 1.2 : 1) * 0.9)) {
+      speed = c.speed * (c.speed / speed);
+      pos = c.z - PLAYER_Z;
+      crashT = 0.6;
+      Sfx.noise(0.35, 0.3);
+      if (navigator.vibrate) navigator.vibrate(60);
+      break;
+    }
+  }
+  playerX = Math.max(-3, Math.min(3, playerX));
+  speed = Math.max(0, Math.min(speed, MAX_SPEED * 1.35));
+  crashT = Math.max(0, crashT - dt);
+
+  pos += speed * dt;
+  dist += speed * dt;
+  while (pos >= trackLen) pos -= trackLen;
+  while (pos < 0) pos += trackLen;
+  skyOffset += pSeg.curve * sp * dt * 0.02;
+
+  // Машины едут сами и объезжают друг друга
+  for (const c of cars) {
+    const old = findSeg(c.z);
+    let target = c.offset;
+    const ahead = findSeg(c.z + SEG * 4);
+    for (const o of ahead.cars) if (o !== c && o.speed < c.speed && overlap(c.offset, CAR_W, o.offset, CAR_W)) target += c.offset > 0 ? -0.6 : 0.6;
+    c.offset += Math.max(-dt, Math.min(dt, target - c.offset));
+    c.offset = Math.max(-0.8, Math.min(0.8, c.offset));
+    c.z = (c.z + c.speed * dt) % trackLen;
+    const now = findSeg(c.z);
+    if (old !== now) { old.cars.splice(old.cars.indexOf(c), 1); now.cars.push(c); }
+  }
+
+  if (dist >= checkpoint * CHECK_EVERY()) {
+    checkpoint++;
+    const bonus = Math.max(8, 16 - checkpoint);
+    timeLeft += bonus;
+    msg = { text: `Контрольная точка! +${bonus} с`, t: 2 };
+    Sfx.tone(523, 0.12, 'square', 0.06); setTimeout(() => Sfx.tone(784, 0.2, 'square', 0.06), 120);
+  }
+  timeLeft -= dt;
+  if (timeLeft <= 0) { timeLeft = 0; gameOver(); }
+  if (msg) { msg.t -= dt; if (msg.t <= 0) msg = null; }
+  engine(sp, boosting);
+}
+
+// Звук мотора
+let osc = null, gain = null;
+function engine(sp, boost) {
+  if (!osc) {
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      osc = ac.createOscillator(); gain = ac.createGain();
+      osc.type = 'sawtooth'; gain.gain.value = 0;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600;
+      osc.connect(f).connect(gain).connect(ac.destination); osc.start();
+      engine.ac = ac;
+    } catch { osc = {}; return; }
+  }
+  if (!gain) return;
+  if (engine.ac.state === 'suspended') engine.ac.resume();
+  osc.frequency.value = 50 + sp * 140 + (boost ? 40 : 0);
+  gain.gain.value = state === 'play' ? 0.03 + sp * 0.03 : 0;
+}
+
+// ---------- Рисование ----------
+function project(p, cx, cy, cz) {
+  const x = -cx, y = p.wy - cy, z = p.wz - cz;
+  p.scale = CAM_DEPTH / z;
+  p.sx = Math.round(W / 2 + p.scale * x * W / 2);
+  p.sy = Math.round(H / 2 - p.scale * y * H / 2);
+  p.sw = Math.round(p.scale * ROAD_W * W / 2);
+  p.cz = z;
+}
+function poly(x1, y1, x2, y2, x3, y3, x4, y4, c) {
+  g.fillStyle = c; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.lineTo(x3, y3); g.lineTo(x4, y4); g.closePath(); g.fill();
+}
+
+function drawSky() {
+  const sky = g.createLinearGradient(0, 0, 0, H * 0.6);
+  sky.addColorStop(0, '#05010f'); sky.addColorStop(0.6, '#2a0b4a'); sky.addColorStop(1, '#ff4fa0');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  // солнце
+  const sx = W / 2 - skyOffset * W * 0.3 % W, sy = H * 0.48, r = Math.min(W, H) * 0.18;
+  const sun = g.createLinearGradient(0, sy - r, 0, sy + r);
+  sun.addColorStop(0, '#ffe66d'); sun.addColorStop(1, '#ff3d7f');
+  g.fillStyle = sun; g.beginPath(); g.arc(sx, sy, r, Math.PI, 0); g.fill();
+  g.fillStyle = '#2a0b4a';
+  for (let i = 0; i < 6; i++) g.fillRect(sx - r, sy - r * 0.55 + i * r * 0.11, r * 2, 2 + i * 1.2);
+  // горы
+  g.fillStyle = '#12052a';
+  g.beginPath(); g.moveTo(0, H * 0.5);
+  for (let x = 0; x <= W + 40; x += 40) {
+    const k = (x / W + skyOffset * 0.6) * 9;
+    g.lineTo(x, H * 0.5 - (Math.sin(k) * 0.5 + Math.sin(k * 2.3) * 0.3 + 0.9) * H * 0.07);
+  }
+  g.lineTo(W, H); g.lineTo(0, H); g.fill();
+}
+
+function drawSprite(s, scale, x, y, clip) {
+  const w = s.w * scale * ROAD_W * W / 2;
+  if (w < 1) return;
+  const h = w * (s.kind === 'palm' ? 1.6 : s.kind === 'lamp' ? 3.5 : 0.6);
+  const top = y - h;
+  if (top > clip) return;
+  g.save();
+  g.beginPath(); g.rect(0, 0, W, clip); g.clip();
+  if (s.kind === 'palm') {
+    g.fillStyle = '#1b0b2e'; g.fillRect(x - w * 0.06, top + h * 0.2, w * 0.12, h * 0.8);
+    g.fillStyle = '#0d3b2e';
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i - 2.5) * 0.55;
+      g.beginPath(); g.ellipse(x + Math.cos(a) * w * 0.3, top + h * 0.22 + Math.sin(a) * w * 0.12 + w * 0.1, w * 0.32, w * 0.08, a, 0, 7); g.fill();
+    }
+  } else if (s.kind === 'lamp') {
+    g.fillStyle = '#3b2a5c'; g.fillRect(x - w * 0.1, top, w * 0.2, h);
+    g.shadowBlur = 20; g.shadowColor = '#6ee7ff'; g.fillStyle = '#c8f6ff';
+    g.beginPath(); g.arc(x, top, w * 0.35, 0, 7); g.fill(); g.shadowBlur = 0;
+  } else {
+    g.fillStyle = '#3b2a5c'; g.fillRect(x - w * 0.04, top + h * 0.4, w * 0.08, h * 0.6);
+    g.shadowBlur = 14; g.shadowColor = '#f472b6'; g.strokeStyle = '#f472b6'; g.lineWidth = Math.max(1, w * 0.04);
+    g.strokeRect(x - w / 2, top, w, h * 0.45); g.shadowBlur = 0;
+  }
+  g.restore();
+}
+
+function drawCar(x, y, w, color, truck, clip, isPlayer, tilt) {
+  const h = w * (truck ? 0.75 : 0.5);
+  if (y - h > clip) return;
+  g.save();
+  if (clip < H) { g.beginPath(); g.rect(0, 0, W, clip); g.clip(); }
+  g.translate(x, y);
+  if (tilt) g.rotate(tilt);
+  g.fillStyle = '#0006'; g.fillRect(-w * 0.52, -h * 0.08, w * 1.04, h * 0.12);
+  g.fillStyle = '#111'; g.fillRect(-w * 0.48, -h * 0.25, w * 0.16, h * 0.25); g.fillRect(w * 0.32, -h * 0.25, w * 0.16, h * 0.25);
+  g.fillStyle = color; g.fillRect(-w / 2, -h * 0.75, w, h * 0.55);
+  g.fillStyle = truck ? color : '#1a1030'; g.fillRect(-w * 0.36, -h, w * 0.72, h * 0.3);
+  g.shadowBlur = 16; g.shadowColor = '#ff2d55'; g.fillStyle = '#ff2d55';
+  g.fillRect(-w * 0.46, -h * 0.6, w * 0.2, h * 0.1); g.fillRect(w * 0.26, -h * 0.6, w * 0.2, h * 0.1);
+  if (isPlayer && Pad.down('nitro') && nitro > 0) {
+    g.shadowColor = '#6ee7ff'; g.fillStyle = '#6ee7ff';
+    for (const sx of [-0.3, 0.3]) { g.beginPath(); g.moveTo(w * sx - w * 0.06, -h * 0.2); g.lineTo(w * sx + w * 0.06, -h * 0.2); g.lineTo(w * sx, h * (0.2 + Math.random() * 0.4)); g.fill(); }
+  }
+  g.restore();
+}
+
+function draw() {
+  drawSky();
+  const base = findSeg(pos);
+  const basePct = (pos % SEG) / SEG;
+  const pSeg = findSeg(pos + PLAYER_Z);
+  const pPct = ((pos + PLAYER_Z) % SEG) / SEG;
+  const playerY = pSeg.p1.wy + (pSeg.p2.wy - pSeg.p1.wy) * pPct;
+  let maxy = H, x = 0, dx = -(base.curve * basePct);
+  for (let n = 0; n < DRAW; n++) {
+    const s = segs[(base.i + n) % segs.length];
+    const loop = s.i < base.i ? trackLen : 0;
+    s.clip = maxy;
+    project(s.p1, playerX * ROAD_W - x, playerY + CAM_H, pos - loop);
+    project(s.p2, playerX * ROAD_W - x - dx, playerY + CAM_H, pos - loop);
+    x += dx; dx += s.curve;
+    if (s.p1.cz <= CAM_DEPTH || s.p2.sy >= s.p1.sy || s.p2.sy >= maxy) continue;
+    const a = s.p1, b = s.p2;
+    const fog = Math.min(1, n / DRAW);
+    g.fillStyle = s.dark ? '#140828' : '#1a0b33'; g.fillRect(0, b.sy, W, a.sy - b.sy);
+    const r1 = a.sw / 6, r2 = b.sw / 6;
+    poly(a.sx - a.sw - r1, a.sy, a.sx - a.sw, a.sy, b.sx - b.sw, b.sy, b.sx - b.sw - r2, b.sy, s.dark ? '#ff2d95' : '#6ee7ff');
+    poly(a.sx + a.sw + r1, a.sy, a.sx + a.sw, a.sy, b.sx + b.sw, b.sy, b.sx + b.sw + r2, b.sy, s.dark ? '#ff2d95' : '#6ee7ff');
+    poly(a.sx - a.sw, a.sy, a.sx + a.sw, a.sy, b.sx + b.sw, b.sy, b.sx - b.sw, b.sy, s.dark ? '#1c1730' : '#211b38');
+    if (s.dark) {
+      const l1 = a.sw / 40, l2 = b.sw / 40;
+      for (let l = 1; l < LANES; l++) {
+        const lx1 = a.sx - a.sw + (a.sw * 2 / LANES) * l, lx2 = b.sx - b.sw + (b.sw * 2 / LANES) * l;
+        poly(lx1 - l1 / 2, a.sy, lx1 + l1 / 2, a.sy, lx2 + l2 / 2, b.sy, lx2 - l2 / 2, b.sy, '#d9d4ff');
+      }
+    }
+    if (fog > 0.5) { g.fillStyle = `rgba(42,11,74,${(fog - 0.5) * 1.6})`; g.fillRect(0, b.sy, W, a.sy - b.sy + 1); }
+    maxy = b.sy;
+  }
+  for (let n = DRAW - 1; n > 0; n--) {
+    const s = segs[(base.i + n) % segs.length];
+    if (s.p1.cz <= CAM_DEPTH) continue;
+    if (n > 2) for (const sp of s.sprites) drawSprite(sp, s.p1.scale, s.p1.sx + s.p1.scale * sp.offset * ROAD_W * W / 2, s.p1.sy, s.clip);
+    for (const c of s.cars) {
+      const pct = (c.z % SEG) / SEG;
+      const sc = s.p1.scale + (s.p2.scale - s.p1.scale) * pct;
+      const cx = s.p1.sx + (s.p2.sx - s.p1.sx) * pct + sc * c.offset * ROAD_W * W / 2;
+      const cy = s.p1.sy + (s.p2.sy - s.p1.sy) * pct;
+      drawCar(cx, cy, CAR_W * (c.truck ? 1.2 : 1) * sc * ROAD_W * W / 2, c.color, c.truck, s.clip, false, 0);
+    }
+  }
+  if (state !== 'menu') {
+    const pw = CAR_W * ROAD_W / CAM_H * W / 2;
+    const bounce = speed ? (Math.random() - 0.5) * 2 * (speed / MAX_SPEED) * (Math.abs(playerX) > 1 ? 4 : 1) : 0;
+    drawCar(W / 2 + (crashT ? (Math.random() - 0.5) * 10 : 0), H - 12 + bounce, Math.min(pw, W * 0.28), '#6ee7ff', false, H, true, steer * 0.06);
+  }
+  if (msg) {
+    g.globalAlpha = Math.min(1, msg.t);
+    g.fillStyle = '#fff'; g.font = '800 36px system-ui'; g.textAlign = 'center';
+    g.shadowBlur = 12; g.shadowColor = '#ff2d95';
+    g.fillText(msg.text, W / 2, H * 0.22); g.shadowBlur = 0; g.globalAlpha = 1;
+  }
+  if (state !== 'menu') {
+    // полоска нитро
+    const bw = Math.min(220, W * 0.4);
+    g.fillStyle = '#ffffff22'; g.fillRect(W / 2 - bw / 2, 16, bw, 8);
+    g.fillStyle = '#6ee7ff'; g.fillRect(W / 2 - bw / 2, 16, bw * nitro, 8);
+    document.getElementById('time').textContent = '⏱ ' + Math.ceil(timeLeft);
+    document.getElementById('time').style.color = timeLeft < 8 ? '#f87171' : '';
+    document.getElementById('speed').textContent = Math.round(speed / MAX_SPEED * 240) + ' км/ч';
+    document.getElementById('dist').textContent = (dist / 100000).toFixed(2) + ' км';
+  }
+}
+
+build();
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

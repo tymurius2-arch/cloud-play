@@ -2,124 +2,309 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cloud Play">
 <title>Cloud Play</title>
-<meta name="description" content="Свой облачный гейминг: играй в игры со своего компьютера и Steam на телефоне, планшете, ноутбуке и телевизоре.">
+<meta name="description" content="Играй прямо в приложении на телефоне, планшете или ноутбуке. Встроенные игры, облачные сервисы и игры со своего ПК со Steam.">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root {
-    --bg: #0b0f1e; --panel: #151b33; --line: #ffffff1a; --text: #e8ecff; --muted: #9aa4c7;
+    color-scheme: dark;
+    --bg: #0b0f1e; --panel: #151b33; --panel2: #1b2342; --line: #ffffff1a; --text: #e8ecff; --muted: #9aa4c7;
     --accent: #6ee7ff; --accent2: #a78bfa;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   a { color: var(--accent); }
-  .wrap { width: min(1040px, 100%); margin: 0 auto; padding: 0 16px; }
-  .hero { padding: 72px 0 56px; text-align: center;
-    background: radial-gradient(circle at 20% 0%, #1d2b5c 0%, transparent 55%), radial-gradient(circle at 90% 30%, #3b1d5c 0%, transparent 50%); }
-  .logo { font-size: clamp(40px, 8vw, 68px); font-weight: 800; letter-spacing: -1.5px; margin: 0; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+
+  header { position: sticky; top: 0; z-index: 10; background: #0b0f1eee; backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 0; }
+  .head-row { display: flex; align-items: center; gap: 12px; width: min(1100px, 100%); margin: 0 auto; }
+  .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; white-space: nowrap; }
   .logo span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .lead { font-size: clamp(17px, 2.6vw, 21px); color: var(--muted); max-width: 640px; margin: 14px auto 28px; }
-  .btn { display: inline-block; padding: 14px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; margin: 6px; }
-  .btn.main { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06132b; }
-  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: #ffffff08; }
-  .devices { margin-top: 26px; font-size: 30px; letter-spacing: 12px; }
-  h2 { font-size: 26px; margin: 56px 0 18px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
-  .card h3 { margin: 6px 0; font-size: 18px; }
-  .card p { margin: 0; color: var(--muted); }
-  .card .ic { font-size: 28px; }
-  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 12px; }
-  ol.steps li { counter-increment: s; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 16px 64px; }
-  ol.steps li::before { content: counter(s); position: absolute; left: 16px; top: 14px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #06132b; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  #install { margin-left: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-size: 14px; }
+  nav { display: flex; gap: 4px; width: min(1100px, 100%); margin: 8px auto 0; overflow-x: auto; scrollbar-width: none; }
+  nav button { background: none; border: 0; padding: 10px 14px; border-bottom: 3px solid transparent; color: var(--muted); font-weight: 700; white-space: nowrap; }
+  nav button.on { color: var(--text); border-bottom-color: var(--accent); }
+
+  main { width: min(1100px, 100%); margin: 0 auto; padding: 8px 16px calc(40px + env(safe-area-inset-bottom)); }
+  h2 { font-size: 20px; margin: 26px 0 4px; }
+  h2 + .muted { margin: 0 0 14px; font-size: 14px; }
+
+  .hero-card { position: relative; overflow: hidden; border-radius: 20px; padding: 22px; margin-top: 16px; min-height: 180px;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; border: 1px solid var(--line); text-align: left; width: 100%; }
+  .hero-card .big-emoji { position: absolute; right: 18px; top: 10px; font-size: 90px; opacity: .9; filter: drop-shadow(0 8px 20px #0008); }
+  .hero-card h3 { margin: 0; font-size: 26px; }
+  .hero-card p { margin: 0; color: #e8ecffcc; max-width: 70%; }
+  .play-pill { align-self: flex-start; margin-top: 8px; background: #fff; color: #06132b; font-weight: 800; border-radius: 999px; padding: 8px 18px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .tile { position: relative; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); padding: 0; text-align: left;
+    display: flex; flex-direction: column; justify-content: flex-end; transition: transform .15s, box-shadow .15s; background: var(--panel); }
+  .tile:hover, .tile:focus-visible { transform: translateY(-3px); box-shadow: 0 12px 30px #6ee7ff26; outline: 2px solid var(--accent); }
+  .tile .emoji { position: absolute; inset: 0 0 35% 0; display: grid; place-items: center; font-size: 64px; filter: drop-shadow(0 6px 16px #0009); }
+  .tile .info { position: relative; padding: 12px; background: linear-gradient(transparent, #000b 40%); }
+  .tile .name { font-weight: 800; line-height: 1.2; }
+  .tile .sub { font-size: 12px; color: #e8ecffaa; margin-top: 2px; }
+  .badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; background: #000a; border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
+  .best { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700; background: #000a; padding: 2px 8px; border-radius: 999px; color: #facc15; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .cloud { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .cloud .card { display: flex; flex-direction: column; gap: 8px; }
+  .cloud h3 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+  .cloud h3 .ic { font-size: 28px; }
+  .cloud p { margin: 0; color: var(--muted); font-size: 14px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #ffffff12; margin-right: 6px; }
+  .tag.free { background: #22c55e33; color: #86efac; }
+  .btn { display: inline-block; text-align: center; text-decoration: none; padding: 12px 18px; border-radius: 12px; font-weight: 700; border: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06132b; margin-top: auto; }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .note { background: #6ee7ff12; border: 1px solid #6ee7ff33; border-radius: 14px; padding: 14px 16px; margin-top: 16px; color: var(--muted); font-size: 14px; }
+  .note b { color: var(--text); }
+
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 10px; }
+  ol.steps li { counter-increment: s; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 14px 14px 58px; color: var(--muted); }
+  ol.steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    font-weight: 800; color: #06132b; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
   ol.steps b { color: var(--text); }
-  ol.steps li { color: var(--muted); }
   code { background: #ffffff14; padding: 2px 6px; border-radius: 6px; color: var(--text); }
-  .connect { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .connect input { flex: 1; min-width: 200px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
-  .connect button { padding: 14px 22px; border: 0; border-radius: 12px; font: inherit; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06132b; cursor: pointer; }
-  details { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
-  details summary { cursor: pointer; font-weight: 700; }
-  details p, details ul { color: var(--muted); margin: 10px 0 0; }
-  footer { color: var(--muted); text-align: center; padding: 48px 0 32px; font-size: 14px; }
+  .connect { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .connect input { flex: 1; min-width: 180px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .connect .btn { margin: 0; }
+
+  /* Плеер */
+  #player { position: fixed; inset: 0; z-index: 100; background: #000; }
+  #player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+  #closeGame { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); z-index: 2;
+    width: 44px; height: 44px; border-radius: 50%; border: 1px solid #ffffff33; background: #000a; font-size: 18px; }
+  #playerLoading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 200; background: #151b33f2;
+    border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; max-width: calc(100% - 32px); text-align: center; }
 </style>
 </head>
 <body>
-  <section class="hero">
-    <div class="wrap">
-      <h1 class="logo">☁️ Cloud <span>Play</span></h1>
-      <p class="lead">Свой облачный гейминг. Твой компьютер со Steam запускает игру, а ты играешь на телефоне, планшете, ноутбуке или телевизоре.</p>
-      <a class="btn main" href="https://github.com/tymurius2-arch/cloud-play/archive/refs/heads/main.zip">⬇ Скачать для Windows</a>
-      <a class="btn ghost" href="#connect">Подключиться к ПК</a>
-      <div class="devices">📱 💻 📺 🎮</div>
-    </div>
+
+<header>
+  <div class="head-row">
+    <div class="logo">☁️ Cloud <span>Play</span></div>
+    <button id="install" class="hidden">⬇ Установить</button>
+  </div>
+  <nav>
+    <button data-tab="games" class="on">🎮 Игры</button>
+    <button data-tab="cloud">☁️ Облако</button>
+    <button data-tab="pc">🖥️ Мой ПК</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Игры -->
+  <section id="tab-games">
+    <button class="hero-card" id="heroGame" style="background: linear-gradient(135deg, #3b0764, #be185d 60%, #f97316);">
+      <div class="big-emoji">🏎️</div>
+      <h3>Ночная трасса</h3>
+      <p>3D-гонка по ночному шоссе. Играй прямо здесь, компьютер не нужен.</p>
+      <span class="play-pill">▶ Играть</span>
+    </button>
+
+    <h2>Встроенные игры</h2>
+    <p class="muted">Работают прямо в приложении, даже без интернета. Управление пальцами, геймпадом или клавиатурой.</p>
+    <div class="grid" id="builtIn"></div>
+
+    <h2>Наши игры</h2>
+    <p class="muted">Игры, которые мы сделали раньше. Открываются прямо в приложении (нужен интернет).</p>
+    <div class="grid" id="ours"></div>
   </section>
 
-  <main class="wrap">
-    <h2>Что умеет</h2>
-    <div class="cards">
-      <div class="card"><div class="ic">🎮</div><h3>Вся библиотека Steam</h3><p>Игры с компьютера появляются сами, с обложками. Нажал на игру, и она запустилась.</p></div>
-      <div class="card"><div class="ic">⚡</div><h3>Быстро</h3><p>Видео идёт по WebRTC с аппаратным кодированием H.264. До 60 кадров в секунду.</p></div>
-      <div class="card"><div class="ic">📱</div><h3>Любое устройство</h3><p>Работает в браузере: Android, iPhone, iPad, ноутбук, Smart TV. Ничего устанавливать не нужно.</p></div>
-      <div class="card"><div class="ic">🕹️</div><h3>Любое управление</h3><p>Геймпад на экране, настоящий геймпад, клавиатура и мышь, режим тачпада.</p></div>
-      <div class="card"><div class="ic">🔊</div><h3>Звук</h3><p>Звук компьютера передаётся в стерео вместе с картинкой.</p></div>
-      <div class="card"><div class="ic">🔒</div><h3>Только для тебя</h3><p>Вход по PIN-коду. Всё работает внутри твоей сети, без чужих серверов.</p></div>
+  <!-- Облако -->
+  <section id="tab-cloud" class="hidden">
+    <h2>Большие игры без компьютера</h2>
+    <p class="muted">Такие игры, как в Steam, запускаются на мощных серверах облачных сервисов, а тебе приходит только видео. Нужен быстрый интернет (от 15–25 Мбит/с) и аккаунт сервиса.</p>
+    <div class="cloud">
+      <div class="card">
+        <h3><span class="ic">🟩</span>GeForce NOW</h3>
+        <div><span class="tag free">есть бесплатный тариф</span><span class="tag">игры из Steam</span></div>
+        <p>Играешь в <b>свои игры из Steam</b>: входишь в Steam прямо в сервисе. Бесплатно, но с очередью и ограничением по времени сессии.</p>
+        <a class="btn" href="https://play.geforcenow.com/" target="_blank" rel="noopener">Открыть GeForce NOW</a>
+      </div>
+      <div class="card">
+        <h3><span class="ic">🟪</span>Boosteroid</h3>
+        <div><span class="tag">подписка</span><span class="tag">игры из Steam</span></div>
+        <p>Украинский облачный сервис. Тоже запускает игры из твоего Steam, Epic и других магазинов. Работает в браузере.</p>
+        <a class="btn" href="https://cloud.boosteroid.com/" target="_blank" rel="noopener">Открыть Boosteroid</a>
+      </div>
+      <div class="card">
+        <h3><span class="ic">🟢</span>Xbox Cloud Gaming</h3>
+        <div><span class="tag">Game Pass Ultimate</span></div>
+        <p>Сотни игр из каталога Game Pass. Лучше всего с геймпадом. Доступен не во всех странах.</p>
+        <a class="btn" href="https://www.xbox.com/play" target="_blank" rel="noopener">Открыть Xbox Cloud</a>
+      </div>
     </div>
+    <div class="note">💡 Эти сервисы не дают встроить себя внутрь чужого приложения, поэтому они открываются в новой вкладке. Совет: подключи к телефону геймпад по Bluetooth, так играть удобнее.</div>
+  </section>
 
-    <h2>Как начать</h2>
-    <ol class="steps">
-      <li>Установи <b>Node.js</b> (кнопка «LTS») с сайта <a href="https://nodejs.org/" target="_blank" rel="noopener">nodejs.org</a>. Это один раз.</li>
-      <li><a href="https://github.com/tymurius2-arch/cloud-play/archive/refs/heads/main.zip">Скачай Cloud Play</a> и распакуй архив, например на рабочий стол.</li>
-      <li>Открой папку и дважды нажми <b>start.bat</b>. Если Windows спросит про брандмауэр, нажми <b>«Разрешить доступ»</b>.</li>
-      <li>В чёрном окне появятся <b>PIN-код</b> и адрес вида <code>https://192.168.1.5:8443</code>. Откроется маленькое окно трансляции, его можно свернуть.</li>
-      <li>На телефоне (в той же сети Wi-Fi) открой этот адрес. Браузер скажет, что сайт «небезопасный»: нажми <b>«Дополнительно» → «Перейти на сайт»</b>. Это нормально: сертификат твой собственный.</li>
-      <li>Введи PIN, выбери игру и играй! Совет: добавь страницу на главный экран телефона, тогда она откроется на весь экран, как приложение.</li>
-    </ol>
-
-    <h2 id="connect">Подключиться к своему ПК</h2>
+  <!-- Мой ПК -->
+  <section id="tab-pc" class="hidden">
+    <h2>Играть со своего компьютера</h2>
+    <p class="muted">Если у тебя есть ПК со Steam, его можно превратить в своё облако: игра идёт на компьютере, а ты играешь на телефоне. Бесплатно и без очередей.</p>
     <div class="card">
-      <p>Введи адрес компьютера из окна Cloud Play (только цифры, например <code>192.168.1.5</code>):</p>
+      <b>Подключиться к ПК</b>
+      <p class="muted" style="margin:4px 0 0">Введи адрес из окна Cloud Play на компьютере, например <code>192.168.1.5</code>:</p>
       <form class="connect" id="connectForm">
         <input id="ip" placeholder="192.168.1.5" inputmode="decimal" autocomplete="off">
-        <button type="submit">Открыть</button>
+        <button class="btn" type="submit">Подключиться</button>
       </form>
     </div>
+    <h2>Первая настройка компьютера</h2>
+    <p class="muted">Делается один раз, на компьютере с Windows.</p>
+    <ol class="steps">
+      <li>Установи <b>Node.js</b> (кнопка «LTS») с сайта <a href="https://nodejs.org/" target="_blank" rel="noopener">nodejs.org</a>.</li>
+      <li><a href="https://github.com/tymurius2-arch/cloud-play/archive/refs/heads/main.zip">Скачай программу Cloud Play для ПК</a> и распакуй архив.</li>
+      <li>Дважды нажми <b>start.bat</b>. Если Windows спросит про брандмауэр, нажми <b>«Разрешить доступ»</b>.</li>
+      <li>В окне появятся <b>PIN-код</b> и адрес. Введи адрес выше (телефон должен быть в той же сети Wi-Fi).</li>
+      <li>Браузер скажет, что сайт «небезопасный»: нажми <b>«Дополнительно» → «Перейти на сайт»</b>. Это нормально, сертификат твой собственный.</li>
+      <li>Введи PIN, выбери игру из Steam и играй!</li>
+    </ol>
+    <div class="note">Совет: в играх ставь режим экрана <b>«Оконный без рамки»</b> (Borderless). Чтобы играть не дома, установи <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> на ПК и телефон.</div>
+  </section>
+</main>
 
-    <h2>Частые вопросы</h2>
-    <details><summary>Почему игра идёт с моего компьютера, а не из «настоящего облака»?</summary>
-      <p>Облачные сервисы (GeForce Now и подобные) держат тысячи мощных компьютеров с видеокартами, и это стоит больших денег. Cloud Play превращает в облако твой собственный ПК. Поэтому это бесплатно и работают все твои игры.</p></details>
-    <details><summary>Картинка чёрная или игра не показывается</summary>
-      <p>Поставь в настройках игры режим экрана <b>«Оконный без рамки»</b> (Borderless / Windowed fullscreen) вместо «Полный экран».</p></details>
-    <details><summary>Мышь или клавиатура не работают в игре</summary>
-      <ul>
-        <li>Если игра запущена «от имени администратора», запусти <code>start.bat</code> тоже от имени администратора.</li>
-        <li>Включи в настройках Cloud Play «Захватывать мышь» для шутеров.</li>
-      </ul></details>
-    <details><summary>Как работает геймпад?</summary>
-      <p>Сейчас кнопки геймпада превращаются в клавиши и мышь: левый стик = WASD, правый стик = мышь, RT = выстрел (левая кнопка), LT = прицел (правая кнопка), A = пробел, B = C, X = R, Y = E, LB = Q, RB = F, Start = Esc, Back = Tab, крестовина = стрелки. Эмуляция настоящего Xbox-геймпада будет следующим шагом.</p></details>
-    <details><summary>Можно играть не дома, через интернет?</summary>
-      <p>Пока Cloud Play работает в домашней сети. Через интернет можно уже сейчас с бесплатной программой <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a>: установи её на компьютер и телефон и открывай адрес компьютера из Tailscale.</p></details>
-    <details><summary>Тормозит или картинка «мыльная»</summary>
-      <ul>
-        <li>Подключи компьютер к роутеру кабелем, а телефон к Wi-Fi 5 ГГц.</li>
-        <li>В настройках (⚙️) уменьши качество или разрешение.</li>
-        <li>Включи «Задержка и FPS» в меню, чтобы видеть, что происходит.</li>
-      </ul></details>
-  </main>
-
-  <footer>Cloud Play · <a href="https://github.com/tymurius2-arch/cloud-play">исходный код на GitHub</a></footer>
+<div id="player" class="hidden">
+  <div id="playerLoading">Загружаю игру…</div>
+  <iframe id="frame" allow="gamepad; fullscreen; autoplay; accelerometer; gyroscope; clipboard-write" allowfullscreen></iframe>
+  <button id="closeGame" title="Выйти из игры">✕</button>
+</div>
+<div id="toast" class="hidden"></div>
 
 <script>
-  document.getElementById('connectForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var ip = document.getElementById('ip').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    if (!ip) return;
-    if (!/:\d+$/.test(ip)) ip += ':8443';
-    try { localStorage.setItem('cp.lastIp', ip); } catch (err) {}
-    location.href = 'https://' + ip + '/';
-  });
-  try { var last = localStorage.getItem('cp.lastIp'); if (last) document.getElementById('ip').value = last.replace(/:8443$/, ''); } catch (err) {}
+'use strict';
+const $ = (id) => document.getElementById(id);
+
+const BUILT_IN = [
+  { id: 'racer', name: 'Ночная трасса', sub: '3D-гонка', emoji: '🏎️', bg: 'linear-gradient(160deg, #3b0764, #be185d 60%, #f97316)', landscape: true,
+    best: (v) => (v / 1000).toFixed(1) + ' км' },
+  { id: 'arena', name: 'Неон-арена', sub: 'Космический шутер', emoji: '🚀', bg: 'linear-gradient(160deg, #0c4a6e, #312e81 60%, #701a75)', landscape: true },
+  { id: 'blocks', name: 'Неон-блоки', sub: 'Головоломка', emoji: '🧩', bg: 'linear-gradient(160deg, #064e3b, #0f766e 50%, #1e3a8a)' },
+];
+const OURS = [
+  { id: 'rick-morty', name: 'Портальный побег', sub: 'Аркада по «Рику и Морти»', emoji: '🌀', bg: 'linear-gradient(160deg, #14532d, #65a30d 60%, #22d3ee)' },
+  { id: 'aquarium', name: 'Эволюция', sub: 'От клетки до гибридов', emoji: '🧬', bg: 'linear-gradient(160deg, #0e7490, #1d4ed8 60%, #7c3aed)' },
+  { id: 'rocket-builder', name: 'Ракетостроитель', sub: '3D-конструктор ракет', emoji: '🚀', bg: 'linear-gradient(160deg, #1e293b, #334155 50%, #ea580c)' },
+  { id: 'frontline', name: 'Линия фронта', sub: 'Стратегия на карте', emoji: '🗺️', bg: 'linear-gradient(160deg, #1e3a8a, #2563eb 50%, #facc15)' },
+  { id: 'price-guess', name: 'Угадай цену', sub: 'Против ИИ', emoji: '💸', bg: 'linear-gradient(160deg, #713f12, #ca8a04 60%, #fde047)' },
+  { id: 'star-voyage', name: 'Star Voyage', sub: 'Космос', emoji: '🌌', bg: 'linear-gradient(160deg, #020617, #1e1b4b 60%, #6d28d9)' },
+  { id: 'event-horizon', name: 'Event Horizon', sub: 'Чёрная дыра', emoji: '🕳️', bg: 'linear-gradient(160deg, #000, #3f1d0b 60%, #f59e0b)' },
+  { id: 'cubomir', name: 'Кубомир', sub: 'Мир из кубов', emoji: '🧱', bg: 'linear-gradient(160deg, #14532d, #4d7c0f 50%, #92400e)' },
+];
+
+function best(id) { try { return Number(localStorage.getItem('cp.best.' + id)) || 0; } catch { return 0; } }
+
+function tile(game, onClick, badge) {
+  const b = document.createElement('button');
+  b.className = 'tile';
+  b.style.background = game.bg;
+  b.innerHTML = `<div class="emoji"></div><div class="info"><div class="name"></div><div class="sub"></div></div>`;
+  b.querySelector('.emoji').textContent = game.emoji;
+  b.querySelector('.name').textContent = game.name;
+  b.querySelector('.sub').textContent = game.sub;
+  if (badge) { const s = document.createElement('span'); s.className = 'badge'; s.textContent = badge; b.appendChild(s); }
+  const v = best(game.id);
+  if (v && game.local) {
+    const s = document.createElement('span'); s.className = 'best';
+    s.textContent = '🏆 ' + (game.best ? game.best(v) : v); b.appendChild(s);
+  }
+  b.onclick = onClick;
+  return b;
+}
+
+function renderGames() {
+  $('builtIn').innerHTML = '';
+  for (const g of BUILT_IN) $('builtIn').appendChild(tile({ ...g, local: true }, () => openGame(`games/${g.id}/`, g), 'офлайн'));
+  $('ours').innerHTML = '';
+  for (const g of OURS) $('ours').appendChild(tile(g, () => openGame(`https://tymurius2-arch.github.io/${g.id}/`, g)));
+}
+renderGames();
+$('heroGame').onclick = () => openGame('games/racer/', BUILT_IN[0]);
+
+// ---------- Плеер ----------
+function openGame(url, game) {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req && !document.fullscreenElement) {
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.then) p.then(() => {
+        if (game.landscape && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      }).catch(() => {});
+    } catch { /* без полноэкранного режима */ }
+  }
+  $('playerLoading').classList.remove('hidden');
+  $('frame').onload = () => { $('playerLoading').classList.add('hidden'); try { $('frame').contentWindow.focus(); } catch { /* другой сайт */ } };
+  $('frame').src = url;
+  $('player').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  history.pushState({ game: true }, '');
+}
+function closeGame(fromHistory) {
+  if ($('player').classList.contains('hidden')) return;
+  $('frame').src = 'about:blank';
+  $('player').classList.add('hidden');
+  document.body.style.overflow = '';
+  if (screen.orientation && screen.orientation.unlock) try { screen.orientation.unlock(); } catch { /* нет */ }
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  if (!fromHistory && history.state && history.state.game) history.back();
+  renderGames();
+}
+$('closeGame').onclick = () => closeGame(false);
+addEventListener('popstate', () => closeGame(true)); // кнопка «Назад» на телефоне
+
+// ---------- Вкладки ----------
+function showTab(name) {
+  for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.tab === name);
+  for (const s of ['games', 'cloud', 'pc']) $('tab-' + s).classList.toggle('hidden', s !== name);
+  try { localStorage.setItem('cp.tab', name); } catch { /* нет */ }
+}
+for (const b of document.querySelectorAll('nav button')) b.onclick = () => showTab(b.dataset.tab);
+try { const t = localStorage.getItem('cp.tab'); if (t && $('tab-' + t)) showTab(t); } catch { /* нет */ }
+
+// ---------- Мой ПК ----------
+$('connectForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  let ip = $('ip').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!ip) return;
+  if (!/:\d+$/.test(ip)) ip += ':8443';
+  try { localStorage.setItem('cp.lastIp', ip); } catch { /* нет */ }
+  location.href = 'https://' + ip + '/';
+});
+try { const last = localStorage.getItem('cp.lastIp'); if (last) $('ip').value = last.replace(/:8443$/, ''); } catch { /* нет */ }
+
+// ---------- Установка как приложение ----------
+let installEvt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('install').classList.remove('hidden'); });
+$('install').onclick = async () => {
+  if (installEvt) { installEvt.prompt(); await installEvt.userChoice; installEvt = null; $('install').classList.add('hidden'); }
+};
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (isIOS && !standalone) {
+  $('install').classList.remove('hidden');
+  $('install').onclick = () => toast('Нажми «Поделиться» ⬆ внизу Safari и выбери «На экран „Домой“»', 6000);
+}
+let toastT = 0;
+function toast(text, ms) {
+  $('toast').textContent = text; $('toast').classList.remove('hidden');
+  clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.add('hidden'), ms || 3000);
+}
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>

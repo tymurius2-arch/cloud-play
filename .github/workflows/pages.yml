@@ -25,7 +25,8 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p _site
-          cp index.html icon.svg _site/
+          cp index.html icon.svg icon-192.png icon-512.png manifest.webmanifest sw.js _site/
+          cp -r games _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

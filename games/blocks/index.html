@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Неон-блоки</title>
+<link rel="stylesheet" href="../shared/game.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="overlay" id="menu">
+  <h1>Неон-блоки</h1>
+  <p>Собирай целые линии из падающих фигур. Чем больше линий сразу, тем больше очков.</p>
+  <p class="keys" id="howto"></p>
+  <button id="play">Играть</button>
+  <p id="best"></p>
+</div>
+<script src="../shared/pad.js"></script>
+<script>
+'use strict';
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+Pad.init({
+  buttons: [
+    { id: 'left', keys: ['ArrowLeft', 'KeyA'], gp: [14], touch: false },
+    { id: 'right', keys: ['ArrowRight', 'KeyD'], gp: [15], touch: false },
+    { id: 'down', keys: ['ArrowDown', 'KeyS'], gp: [13], touch: false },
+    { id: 'rot', keys: ['ArrowUp', 'KeyW', 'KeyX'], gp: [0, 3], touch: false },
+    { id: 'rotl', keys: ['KeyZ', 'ControlLeft'], gp: [2], touch: false },
+    { id: 'drop', keys: ['Space'], gp: [1, 12], touch: false },
+    { id: 'hold', keys: ['KeyC', 'ShiftLeft'], gp: [4, 5], touch: false },
+    { id: 'pause', keys: ['Escape', 'KeyP'], gp: [9], touch: false },
+  ],
+});
+document.getElementById('howto').textContent = Pad.isTouch
+  ? 'Касание — повернуть, свайп влево/вправо — сдвинуть, свайп вниз — уронить, свайп вверх — отложить фигуру.'
+  : '← → — двигать, ↑ — повернуть, ↓ — быстрее, пробел — уронить, C — отложить. Можно с геймпадом.';
+
+const COLS = 10, ROWS = 20;
+const SHAPES = {
+  I: [[0, 1], [1, 1], [2, 1], [3, 1]], O: [[1, 0], [2, 0], [1, 1], [2, 1]], T: [[1, 0], [0, 1], [1, 1], [2, 1]],
+  S: [[1, 0], [2, 0], [0, 1], [1, 1]], Z: [[0, 0], [1, 0], [1, 1], [2, 1]], J: [[0, 0], [0, 1], [1, 1], [2, 1]],
+  L: [[2, 0], [0, 1], [1, 1], [2, 1]],
+};
+const COLORS = { I: '#6ee7ff', O: '#facc15', T: '#a78bfa', S: '#34d399', Z: '#f87171', J: '#60a5fa', L: '#fb923c' };
+
+let board, cur, next, hold, canHold, score, lines, level, dropT, state = 'menu', bag = [], clearing = null, lockT = 0;
+
+function newBag() { const k = Object.keys(SHAPES); for (let i = k.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [k[i], k[j]] = [k[j], k[i]]; } return k; }
+function take() { if (!bag.length) bag = newBag(); return bag.pop(); }
+function piece(type) { return { type, cells: SHAPES[type].map((c) => c.slice()), x: 3, y: type === 'I' ? -1 : 0 }; }
+
+function reset() {
+  board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  bag = []; next = take(); hold = null; score = 0; lines = 0; level = 1; dropT = 0; clearing = null;
+  spawn();
+}
+function spawn() {
+  cur = piece(next); next = take(); canHold = true; lockT = 0;
+  if (collide(cur.cells, cur.x, cur.y)) gameOver();
+}
+function collide(cells, x, y) {
+  return cells.some(([cx, cy]) => { const X = cx + x, Y = cy + y; return X < 0 || X >= COLS || Y >= ROWS || (Y >= 0 && board[Y][X]); });
+}
+function move(dx) { if (!collide(cur.cells, cur.x + dx, cur.y)) { cur.x += dx; lockT = 0; Sfx.tone(220, 0.03, 'square', 0.02); return true; } return false; }
+function rotate(dir) {
+  if (cur.type === 'O') return;
+  const size = cur.type === 'I' ? 4 : 3;
+  const cells = cur.cells.map(([x, y]) => (dir > 0 ? [size - 1 - y, x] : [y, size - 1 - x]));
+  for (const k of [0, -1, 1, -2, 2]) {
+    for (const up of [0, -1]) {
+      if (!collide(cells, cur.x + k, cur.y + up)) { cur.cells = cells; cur.x += k; cur.y += up; lockT = 0; Sfx.tone(440, 0.04, 'square', 0.03); return; }
+    }
+  }
+}
+function ghostY() { let y = cur.y; while (!collide(cur.cells, cur.x, y + 1)) y++; return y; }
+function hardDrop() { const gy = ghostY(); score += (gy - cur.y) * 2; cur.y = gy; lock(); Sfx.noise(0.08, 0.12); }
+function doHold() {
+  if (!canHold) return;
+  const t = cur.type;
+  if (hold) { cur = piece(hold); } else { cur = piece(next); next = take(); }
+  hold = t; canHold = false;
+}
+function lock() {
+  for (const [cx, cy] of cur.cells) { const Y = cy + cur.y; if (Y < 0) { gameOver(); return; } board[Y][cx + cur.x] = cur.type; }
+  const full = [];
+  board.forEach((row, i) => { if (row.every(Boolean)) full.push(i); });
+  if (full.length) {
+    clearing = { rows: full, t: 0.25 };
+    const pts = [0, 100, 300, 500, 800][full.length] * level;
+    score += pts;
+    lines += full.length;
+    level = 1 + Math.floor(lines / 10);
+    Sfx.tone(520 + full.length * 120, 0.25, 'triangle', 0.08, 1200);
+    if (full.length === 4) flash = 0.4;
+  }
+  spawn();
+}
+let flash = 0;
+
+function gameOver() {
+  state = 'over';
+  Best.set('blocks', score);
+  Sfx.tone(300, 0.8, 'sawtooth', 0.07, 60);
+  const m = document.getElementById('menu');
+  m.querySelector('h1').textContent = 'Игра окончена';
+  m.querySelector('p').innerHTML = `<span class="big">${score} очков</span><br>Линий: ${lines}, уровень ${level}`;
+  document.getElementById('play').textContent = 'Ещё раз';
+  showBest();
+  m.classList.remove('hidden');
+}
+function showBest() { const b = Best.get('blocks'); document.getElementById('best').textContent = b ? 'Рекорд: ' + b : ''; }
+showBest();
+document.getElementById('play').onclick = () => { reset(); state = 'play'; document.getElementById('menu').classList.add('hidden'); };
+
+// Повтор движения при удержании
+const rep = { left: 0, right: 0, down: 0 };
+function repeatKey(id, dt, fn, first, every) {
+  if (!Pad.down(id)) { rep[id] = 0; return; }
+  if (rep[id] === 0) { fn(); rep[id] = first; return; }
+  rep[id] -= dt;
+  while (rep[id] <= 0) { fn(); rep[id] += every; }
+}
+
+// Свайпы
+let touch = null;
+cv.addEventListener('pointerdown', (e) => {
+  if (state !== 'play' || e.pointerType === 'mouse') return;
+  touch = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), moved: false, soft: false };
+});
+cv.addEventListener('pointermove', (e) => {
+  if (!touch || state !== 'play') return;
+  const cell = layout().cell;
+  while (e.clientX - touch.x > cell * 0.9) { move(1); touch.x += cell * 0.9; touch.moved = true; }
+  while (touch.x - e.clientX > cell * 0.9) { move(-1); touch.x -= cell * 0.9; touch.moved = true; }
+  while (e.clientY - touch.y > cell) {
+    touch.y += cell; touch.moved = true; touch.soft = true;
+    if (!collide(cur.cells, cur.x, cur.y + 1)) { cur.y++; score += 1; }
+  }
+});
+cv.addEventListener('pointerup', (e) => {
+  if (!touch || state !== 'play') { touch = null; return; }
+  const dt = performance.now() - touch.t, dy = e.clientY - touch.sy, dx = e.clientX - touch.sx;
+  if (dt < 250 && dy > 60 && Math.abs(dy) > Math.abs(dx)) hardDrop();
+  else if (dt < 300 && dy < -50 && Math.abs(dy) > Math.abs(dx)) doHold();
+  else if (!touch.moved && dt < 300) rotate(e.clientX < W / 2 && !Pad.isTouch ? -1 : 1);
+  touch = null;
+});
+
+function update(dt) {
+  Pad.update();
+  flash = Math.max(0, flash - dt);
+  if (state === 'play' && Pad.pressed('pause')) { state = 'pause'; return; }
+  if (state === 'pause') { if (Pad.pressed('pause') || Pad.pressed('rot')) state = 'play'; return; }
+  if (state !== 'play') {
+    if ((Pad.pressed('rot') || Pad.pressed('drop')) && !document.getElementById('menu').classList.contains('hidden')) document.getElementById('play').click();
+    return;
+  }
+  if (clearing) {
+    clearing.t -= dt;
+    if (clearing.t <= 0) {
+      for (const r of clearing.rows) { board.splice(r, 1); board.unshift(Array(COLS).fill(null)); }
+      clearing = null;
+    }
+    return;
+  }
+  repeatKey('left', dt, () => move(-1), 0.17, 0.05);
+  repeatKey('right', dt, () => move(1), 0.17, 0.05);
+  if (Pad.pressed('rot')) rotate(1);
+  if (Pad.pressed('rotl')) rotate(-1);
+  if (Pad.pressed('drop')) { hardDrop(); return; }
+  if (Pad.pressed('hold')) doHold();
+  const speed = Math.max(0.05, 0.8 * Math.pow(0.85, level - 1));
+  dropT += Pad.down('down') ? dt * 12 : dt;
+  if (Pad.down('down') && dropT >= speed) score += 1;
+  while (dropT >= speed) {
+    dropT -= speed;
+    if (!collide(cur.cells, cur.x, cur.y + 1)) cur.y++;
+  }
+  if (collide(cur.cells, cur.x, cur.y + 1)) { lockT += dt; if (lockT > 0.5) lock(); }
+}
+
+function layout() {
+  const side = W > H * 0.9;
+  const cell = Math.floor(Math.min((H - 40) / ROWS, (side ? W * 0.6 : W - 24) / COLS, 40));
+  const bw = cell * COLS, bh = cell * ROWS;
+  const bx = Math.floor((W - bw) / 2), by = Math.floor((H - bh) / 2) + (side ? 0 : 20);
+  return { cell, bx, by, bw, bh, side };
+}
+
+function block(x, y, s, color, alpha) {
+  g.globalAlpha = alpha || 1;
+  g.fillStyle = color; g.shadowColor = color; g.shadowBlur = alpha ? 0 : 10;
+  g.fillRect(x + 1, y + 1, s - 2, s - 2);
+  g.shadowBlur = 0;
+  g.fillStyle = '#ffffff40'; g.fillRect(x + 2, y + 2, s - 4, Math.max(2, s * 0.18));
+  g.globalAlpha = 1;
+}
+function mini(type, x, y, s, label) {
+  g.fillStyle = '#9aa4c7'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(label, x, y - 6);
+  g.strokeStyle = '#ffffff20'; g.strokeRect(x, y, s * 4.5, s * 3);
+  if (!type) return;
+  for (const [cx, cy] of SHAPES[type]) block(x + s * 0.25 + cx * s, y + s * 0.5 + cy * s, s, COLORS[type]);
+}
+
+function draw() {
+  g.fillStyle = '#05070f'; g.fillRect(0, 0, W, H);
+  if (flash) { g.fillStyle = `rgba(110,231,255,${flash})`; g.fillRect(0, 0, W, H); }
+  const L = layout();
+  g.fillStyle = '#0b0f1e'; g.fillRect(L.bx, L.by, L.bw, L.bh);
+  g.strokeStyle = '#ffffff0d';
+  g.beginPath();
+  for (let i = 1; i < COLS; i++) { g.moveTo(L.bx + i * L.cell, L.by); g.lineTo(L.bx + i * L.cell, L.by + L.bh); }
+  for (let i = 1; i < ROWS; i++) { g.moveTo(L.bx, L.by + i * L.cell); g.lineTo(L.bx + L.bw, L.by + i * L.cell); }
+  g.stroke();
+  g.strokeStyle = '#6ee7ff55'; g.lineWidth = 2; g.strokeRect(L.bx - 1, L.by - 1, L.bw + 2, L.bh + 2); g.lineWidth = 1;
+  if (board) {
+    board.forEach((row, y) => row.forEach((t, x) => {
+      if (!t) return;
+      const c = clearing && clearing.rows.includes(y) ? '#ffffff' : COLORS[t];
+      block(L.bx + x * L.cell, L.by + y * L.cell, L.cell, c);
+    }));
+    if (state === 'play' && cur && !clearing) {
+      const gy = ghostY();
+      for (const [cx, cy] of cur.cells) if (cy + gy >= 0) block(L.bx + (cx + cur.x) * L.cell, L.by + (cy + gy) * L.cell, L.cell, COLORS[cur.type], 0.22);
+      for (const [cx, cy] of cur.cells) if (cy + cur.y >= 0) block(L.bx + (cx + cur.x) * L.cell, L.by + (cy + cur.y) * L.cell, L.cell, COLORS[cur.type]);
+    }
+    const s = Math.max(10, Math.floor(L.cell * 0.55));
+    if (L.side) {
+      const rx = L.bx + L.bw + 20, lx = L.bx - 20 - s * 4.5;
+      mini(next, rx, L.by + 24, s, 'Дальше');
+      mini(hold, lx, L.by + 24, s, 'Отложено');
+      g.fillStyle = '#fff'; g.font = '800 22px system-ui'; g.textAlign = 'left';
+      g.fillText(score, rx, L.by + s * 3 + 80);
+      g.fillStyle = '#9aa4c7'; g.font = '600 14px system-ui';
+      g.fillText('Линии ' + lines, rx, L.by + s * 3 + 104);
+      g.fillText('Уровень ' + level, rx, L.by + s * 3 + 124);
+    } else {
+      g.fillStyle = '#fff'; g.font = '800 18px system-ui'; g.textAlign = 'left';
+      g.fillText(`${score}`, L.bx, L.by - 10);
+      g.fillStyle = '#9aa4c7'; g.font = '600 13px system-ui'; g.textAlign = 'right';
+      g.fillText(`Линии ${lines} · Ур. ${level} · Дальше: `, L.bx + L.bw - s * 3, L.by - 10);
+      for (const [cx, cy] of SHAPES[next]) block(L.bx + L.bw - s * 3 + cx * s * 0.6, L.by - 24 + cy * s * 0.6, s * 0.6, COLORS[next]);
+    }
+  }
+  if (state === 'pause') {
+    g.fillStyle = '#000a'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#fff'; g.font = '800 40px system-ui'; g.textAlign = 'center'; g.fillText('Пауза', W / 2, H / 2);
+  }
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
