@@ -39,17 +39,26 @@ function saveConfig() {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
+// Адреса компьютера в домашней сети. VPN-программы (Radmin, Hamachi, ZeroTier…)
+// и виртуальные машины пропускаем: телефон через них не подключится.
+const VIRTUAL_ADAPTER = /vEthernet|VirtualBox|VMware|WSL|Hyper-V|docker|br-|veth|Radmin|Hamachi|ZeroTier|Tailscale|VPN|TAP-|TUN|WireGuard|OpenVPN|Bluetooth|Npcap|Loopback|Virtual/i;
+function isHomeLan(ip) {
+  return /^192\.168\./.test(ip) || /^10\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+}
 function lanAddresses() {
-  const list = [];
+  const home = [];
+  const other = [];
   for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
     for (const a of addrs || []) {
       if (a.family !== 'IPv4' && a.family !== 4) continue;
-      if (a.internal) continue;
-      if (/vEthernet|VirtualBox|VMware|WSL|Hyper-V|docker|br-|veth/i.test(name)) continue;
-      list.push(a.address);
+      if (a.internal || /^169\.254\./.test(a.address)) continue;
+      if (VIRTUAL_ADAPTER.test(name)) continue;
+      (isHomeLan(a.address) ? home : other).push(a.address);
     }
   }
-  return list;
+  // 192.168.x.x чаще всего и есть домашний Wi-Fi, ставим его первым.
+  home.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
+  return home.length ? home : other;
 }
 
 // ---------- Сертификат для HTTPS ----------

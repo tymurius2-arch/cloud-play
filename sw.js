@@ -1,7 +1,7 @@
 // Cloud Play: быстрое открытие и работа без интернета.
 // Всё приложение отдаётся сразу из памяти телефона, а свежая версия
 // тихо скачивается в фоне и появится при следующем открытии.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const APP = 'cloud-play-app-' + VERSION;
 const EMU = 'cloud-play-emu-4.2.3'; // файлы эмулятора не меняются внутри версии
 const SHELL = [
@@ -41,7 +41,8 @@ async function staleWhileRevalidate(e, request) {
     return res;
   });
   if (cached) {
-    e.waitUntil(fresh.catch(() => {}));
+    fresh.catch(() => {});
+    try { e.waitUntil(fresh.catch(() => {})); } catch { /* Safari: обновится в следующий раз */ }
     return cached;
   }
   try { return await fresh; } catch {
@@ -64,10 +65,11 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // При любой ошибке просто идём в интернет как обычный сайт.
   if (url.origin === location.origin) {
-    e.respondWith(staleWhileRevalidate(e, req));
+    e.respondWith(staleWhileRevalidate(e, req).catch(() => fetch(req)));
   } else if (req.url.startsWith(EMU_PREFIX) && !/\/cores\/[^/]+\.data$/.test(url.pathname)) {
     // Ядра консолей (.data, до 20 МБ) эмулятор сам хранит у себя, второй копии не нужно.
-    e.respondWith(cacheFirst(req));
+    e.respondWith(cacheFirst(req).catch(() => fetch(req)));
   }
 });
