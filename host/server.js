@@ -30,6 +30,35 @@ let config = {};
 try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { /* первый запуск */ }
 if (!/^\d{6}$/.test(String(config.pin || ''))) config.pin = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 if (process.env.PIN) config.pin = String(process.env.PIN);
+if (!Array.isArray(config.devices)) config.devices = [];
+
+// ---------- Запомненные устройства ----------
+// PIN вводится один раз, дальше устройство входит по своему ключу.
+const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+function deviceByToken(token) {
+  if (!token || typeof token !== 'string' || token.length < 32) return null;
+  const h = hashToken(token);
+  return config.devices.find((d) => d.hash === h) || null;
+}
+function addDevice(name) {
+  const token = crypto.randomBytes(24).toString('hex');
+  config.devices.push({ hash: hashToken(token), name: String(name || 'Устройство').slice(0, 60), added: Date.now(), lastSeen: Date.now() });
+  saveConfig();
+  return token;
+}
+function touchDevice(d) {
+  d.lastSeen = Date.now();
+  saveConfig();
+}
+function deviceName(ua) {
+  ua = String(ua || '');
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Windows/.test(ua)) return 'Windows';
+  if (/Mac OS/.test(ua)) return 'Mac';
+  return 'Устройство';
+}
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || config.httpsPort || 8443);
 let HTTP_PORT = Number(process.env.HTTP_PORT || config.httpPort || 8080);
 const NO_BROWSER = !!process.env.NO_BROWSER;
@@ -121,7 +150,7 @@ function handleRomsApi(req, res, url, p) {
   if (origin && (APP_ORIGINS.includes(origin) || origin === `https://${req.headers.host}`)) {
     Object.assign(headers, {
       'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Headers': 'X-PIN',
+      'Access-Control-Allow-Headers': 'X-PIN, X-Token',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Private-Network': 'true',
       'Access-Control-Expose-Headers': 'Content-Length',
@@ -133,8 +162,14 @@ function handleRomsApi(req, res, url, p) {
   const ip = req.socket.remoteAddress || '';
   const f = failedLogins.get(ip);
   if (f && f.until > Date.now()) { res.writeHead(429, headers); return res.end(); }
+  const known = deviceByToken(String(req.headers['x-token'] || ''));
   const pin = String(req.headers['x-pin'] || url.searchParams.get('pin') || '');
-  if (pin !== config.pin) {
+  let newToken = null;
+  if (known) {
+    touchDevice(known);
+  } else if (pin === config.pin) {
+    newToken = addDevice(deviceName(req.headers['user-agent']));
+  } else {
     const cnt = f && f.until && f.until <= Date.now() ? 1 : (f ? f.count : 0) + 1;
     failedLogins.set(ip, { count: cnt, until: cnt >= 5 ? Date.now() + 60000 : 0 });
     res.writeHead(401, headers); return res.end();
@@ -143,7 +178,7 @@ function handleRomsApi(req, res, url, p) {
 
   if (p === '/api/roms') {
     res.writeHead(200, { ...headers, 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ folder: ROMS_DIR, files: listRoms().map(({ name, size }) => ({ name, size })) }));
+    return res.end(JSON.stringify({ folder: ROMS_DIR, token: newToken, files: listRoms().map(({ name, size }) => ({ name, size })) }));
   }
   // /api/roms/file?name=...
   const name = url.searchParams.get('name') || '';
@@ -241,6 +276,13 @@ function handleInput(ws, m) {
 
 function onHostMessage(ws, m) {
   switch (m.type) {
+    case 'forget-devices':
+      config.devices = [];
+      config.pin = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      saveConfig();
+      console.log('Все устройства забыты. Новый PIN-код: ' + config.pin);
+      send(ws, { type: 'info', pin: config.pin, urls: clientUrls(), test: TEST_SOURCE, devices: 0 });
+      break;
     case 'offer':
     case 'ice':
     case 'host-error':
@@ -361,7 +403,7 @@ function onConnection(ws, req) {
         hostWs = ws;
         ws.role = 'host';
         console.log('Окно трансляции подключено.');
-        send(ws, { type: 'info', pin: config.pin, urls: clientUrls(), test: TEST_SOURCE });
+        send(ws, { type: 'info', pin: config.pin, urls: clientUrls(), test: TEST_SOURCE, devices: config.devices.length });
         if (pendingStart && activeClient) {
           send(ws, { type: 'start', settings: pendingStart });
           pendingStart = null;
@@ -373,16 +415,25 @@ function onConnection(ws, req) {
         send(ws, { type: 'hello-fail', reason: 'Слишком много попыток. Подожди минуту.' });
         return ws.close();
       }
-      if (String(m.pin || '') !== config.pin) {
-        const cnt = f && f.until && f.until <= Date.now() ? 1 : (f ? f.count : 0) + 1;
-        failedLogins.set(ip, { count: cnt, until: cnt >= 5 ? Date.now() + 60000 : 0 });
-        send(ws, { type: 'hello-fail', reason: 'Неверный PIN-код.' });
+      const known = deviceByToken(m.token);
+      let newToken = null;
+      if (known) {
+        touchDevice(known);
+      } else if (m.pin && String(m.pin) === config.pin) {
+        newToken = addDevice(deviceName(req.headers['user-agent']));
+        console.log('Новое устройство запомнено:', deviceName(req.headers['user-agent']));
+      } else {
+        if (m.pin) {
+          const cnt = f && f.until && f.until <= Date.now() ? 1 : (f ? f.count : 0) + 1;
+          failedLogins.set(ip, { count: cnt, until: cnt >= 5 ? Date.now() + 60000 : 0 });
+        }
+        send(ws, { type: 'hello-fail', reason: m.pin ? 'Неверный PIN-код.' : '' });
         return ws.close();
       }
       failedLogins.delete(ip);
       ws.role = 'client';
       console.log('Подключилось устройство', ip.replace('::ffff:', ''));
-      send(ws, { type: 'hello-ok', name: os.hostname(), platform: process.platform, hostReady: !!hostWs });
+      send(ws, { type: 'hello-ok', name: os.hostname(), platform: process.platform, hostReady: !!hostWs, token: newToken });
       return;
     }
 
@@ -574,7 +625,8 @@ function printBanner() {
     ? `  Steam найден: ${games.games.length} игр(ы)`
     : '  Steam не найден (можно играть в режиме «Рабочий стол»)');
   console.log('');
-  console.log('  PIN-код для подключения:  ' + config.pin.slice(0, 3) + ' ' + config.pin.slice(3));
+  console.log('  PIN-код (нужен один раз для нового устройства):  ' + config.pin.slice(0, 3) + ' ' + config.pin.slice(3));
+  if (config.devices.length) console.log(`  Запомнено устройств: ${config.devices.length} (они входят без кода)`);
   console.log('');
   const ts = tailscaleAddresses();
   if (urls.length) {

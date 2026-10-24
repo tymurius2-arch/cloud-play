@@ -261,6 +261,7 @@
     <ol class="steps">
       <li>Установи <b>Tailscale</b> на компьютер и на телефон: <a href="https://tailscale.com/download" target="_blank" rel="noopener">tailscale.com/download</a>. Войди в обоих в <b>один и тот же</b> аккаунт (например Google).</li>
       <li>На компьютере: Параметры → Система → Питание → <b>«Переводить в спящий режим: Никогда»</b>.</li>
+      <li>Дважды нажми <b>autostart-on.bat</b> в папке Cloud Play: программа будет сама запускаться вместе с Windows (например, после обновления).</li>
       <li>Запусти <b>start.bat</b> и не закрывай. В окне появится строка «Из другого города или страны» с адресом <code>https://100.…</code>. Сфотографируй её.</li>
       <li>В поездке включи Tailscale на телефоне и введи этот адрес вверху страницы (или открой его в Safari).</li>
       <li>В настройках ⚙️ выбери качество <b>«Мобильный интернет»</b>: это примерно 1 ГБ трафика в час. На Wi-Fi в отеле можно поставить выше.</li>
@@ -488,19 +489,21 @@ $('fromPcBtn').onclick = () => {
   $('pcPanel').classList.toggle('hidden');
   try {
     const ip = localStorage.getItem('cp.lastIp'); if (ip && !$('pcIp').value) $('pcIp').value = ip.replace(/:8443$/, '');
-    const pin = localStorage.getItem('cp.pcPin'); if (pin && !$('pcPin').value) $('pcPin').value = pin;
+    if (localStorage.getItem('cp.pcToken')) $('pcPin').classList.add('hidden');
   } catch { /* нет */ }
 };
 $('pcConnect').onclick = async () => {
   const base = pcBase();
   const pin = $('pcPin').value.replace(/\D/g, '');
-  if (!base || pin.length !== 6) { $('pcStatus').textContent = 'Введи адрес компьютера и PIN-код (6 цифр) из окна Cloud Play.'; return; }
-  try { localStorage.setItem('cp.lastIp', base.replace('https://', '')); localStorage.setItem('cp.pcPin', pin); } catch { /* нет */ }
+  let token = '';
+  try { token = localStorage.getItem('cp.pcToken') || ''; } catch { /* нет */ }
+  if (!base || (!token && pin.length !== 6)) { $('pcStatus').textContent = 'Введи адрес компьютера и PIN-код (6 цифр) из окна Cloud Play. Код нужен только в первый раз.'; return; }
+  try { localStorage.setItem('cp.lastIp', base.replace('https://', '')); } catch { /* нет */ }
   $('pcStatus').textContent = 'Подключаюсь…';
   $('pcList').innerHTML = '';
   let res;
   try {
-    res = await fetch(base + '/api/roms', { headers: { 'X-PIN': pin } });
+    res = await fetch(base + '/api/roms', { headers: token ? { 'X-Token': token, 'X-PIN': pin } : { 'X-PIN': pin } });
   } catch (e) {
     $('pcStatus').innerHTML = '';
     const a = document.createElement('a'); a.href = base + '/'; a.target = '_blank'; a.rel = 'noopener'; a.textContent = base;
@@ -508,9 +511,16 @@ $('pcConnect').onclick = async () => {
       ', нажми «Дополнительно» → «Перейти на сайт» (это нужно один раз), вернись сюда и нажми «Показать игры» ещё раз.');
     return;
   }
-  if (res.status === 401) { $('pcStatus').textContent = 'Неверный PIN-код.'; return; }
+  if (res.status === 401) {
+    try { localStorage.removeItem('cp.pcToken'); } catch { /* нет */ }
+    $('pcPin').classList.remove('hidden');
+    $('pcStatus').textContent = token && !pin ? 'Компьютер тебя забыл. Введи PIN-код ещё раз.' : 'Неверный PIN-код.';
+    return;
+  }
   if (!res.ok) { $('pcStatus').textContent = 'Ошибка ' + res.status + '. Обнови программу на компьютере.'; return; }
   const data = await res.json();
+  if (data.token) { token = data.token; try { localStorage.setItem('cp.pcToken', token); localStorage.removeItem('cp.pcPin'); } catch { /* нет */ } }
+  $('pcPin').classList.add('hidden');
   if (!data.files.length) { $('pcStatus').textContent = `Папка «Игры для телефона» на компьютере пустая. Положи туда файлы игр: ${data.folder}`; return; }
   $('pcStatus').textContent = `Файлы на компьютере (${data.files.length}):`;
   for (const f of data.files) {
@@ -522,15 +532,15 @@ $('pcConnect').onclick = async () => {
     row.children[0].textContent = em;
     row.children[1].textContent = f.name;
     row.children[2].textContent = fmtSize(f.size);
-    row.children[3].onclick = () => downloadFromPc(base, pin, f, row.children[3]);
+    row.children[3].onclick = () => downloadFromPc(base, token, f, row.children[3]);
     $('pcList').appendChild(row);
   }
 };
 
-async function downloadFromPc(base, pin, f, btn) {
+async function downloadFromPc(base, token, f, btn) {
   btn.disabled = true;
   try {
-    const res = await fetch(base + '/api/roms/file?name=' + encodeURIComponent(f.name), { headers: { 'X-PIN': pin } });
+    const res = await fetch(base + '/api/roms/file?name=' + encodeURIComponent(f.name), { headers: { 'X-Token': token } });
     if (!res.ok) throw new Error('ошибка ' + res.status);
     const total = Number(res.headers.get('Content-Length')) || f.size;
     const reader = res.body.getReader();

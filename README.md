@@ -37,6 +37,7 @@
 
 | Файл | Что делает |
 |---|---|
+| `autostart-on.bat`, `autostart-off.bat` | Включить / выключить запуск Cloud Play вместе с Windows |
 | `start.bat` | Запуск в Windows: проверяет Node.js, ставит зависимости, запускает сервер |
 | `host/server.js` | HTTPS-сервер, PIN-код, связь между окном трансляции и клиентом |
 | `host/steam.js` | Читает библиотеку Steam (`libraryfolders.vdf`, `appmanifest_*.acf`), запускает игры |

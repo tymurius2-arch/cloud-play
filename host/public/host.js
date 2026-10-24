@@ -46,6 +46,7 @@ async function handle(m) {
   switch (m.type) {
     case 'info':
       $('pin').textContent = m.pin.slice(0, 3) + ' ' + m.pin.slice(3);
+      $('devices').textContent = m.devices ? `Запомнено устройств: ${m.devices}. Они входят без кода.` : 'Пока нет запомненных устройств.';
       $('urls').innerHTML = '';
       for (const u of m.urls) {
         const li = document.createElement('li');
@@ -365,5 +366,9 @@ async function startFallback() {
     lastFrame = now;
   }
 }
+
+$('forgetBtn').onclick = () => {
+  if (confirm('Все телефоны и планшеты придётся подключить заново с новым PIN-кодом. Продолжить?')) send({ type: 'forget-devices' });
+};
 
 connect();

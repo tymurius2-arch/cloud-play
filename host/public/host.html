@@ -42,8 +42,9 @@
   </div>
 
   <div class="card">
-    <div class="muted">PIN-код для подключения</div>
+    <div class="muted">PIN-код (вводится один раз на новом устройстве)</div>
     <div class="pin" id="pin">––––––</div>
+    <div class="muted" id="devices"></div>
     <div class="muted" style="margin-top:6px">Открой на телефоне (та же сеть Wi-Fi):</div>
     <ul id="urls"></ul>
   </div>
@@ -53,6 +54,9 @@
     Если внизу экрана висит полоска «Идёт показ экрана», нажми на ней <b>«Скрыть»</b>.
   </div>
 
+  <div class="card">
+    <button id="forgetBtn" style="background:#f87171">Забыть все устройства и сменить PIN</button>
+  </div>
 <script src="host.js"></script>
 </body>
 </html>

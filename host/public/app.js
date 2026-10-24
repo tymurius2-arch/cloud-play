@@ -50,7 +50,7 @@ function connect(pin) {
   if (ws) { ws.onclose = null; try { ws.close(); } catch { /* закрыт */ } }
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.binaryType = 'arraybuffer';
-  ws.onopen = () => send({ type: 'hello', role: 'client', pin });
+  ws.onopen = () => send({ type: 'hello', role: 'client', pin, token: store.get('token', null) });
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') { onVideoChunk(e.data); return; }
     let m;
@@ -76,7 +76,10 @@ async function onMessage(m, pin) {
   switch (m.type) {
     case 'hello-ok':
       authed = true;
-      store.set('pin', pin);
+      // Устройство запомнено: дальше входим без кода.
+      if (m.token) store.set('token', m.token);
+      store.set('pin', null);
+      pin = '';
       $('pcName').textContent = '🖥️ ' + m.name;
       $('loginError').textContent = '';
       if (streaming) send({ type: 'start', settings: streamSettings() });
@@ -85,6 +88,7 @@ async function onMessage(m, pin) {
     case 'hello-fail':
       authed = false;
       store.set('pin', null);
+      store.set('token', null);
       show('login');
       $('loginError').textContent = m.reason;
       $('loginBtn').disabled = false;
@@ -215,6 +219,7 @@ $('settingsClose').onclick = () => $('settings').classList.add('hidden');
 $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').classList.add('hidden'); });
 $('logoutBtn').onclick = () => {
   store.set('pin', null);
+  store.set('token', null);
   authed = false;
   if (ws) { ws.onclose = null; ws.close(); }
   $('settings').classList.add('hidden');
@@ -896,5 +901,5 @@ setInterval(async () => {
 // ---------- Старт ----------
 fillSettings();
 const savedPin = store.get('pin', null);
-if (savedPin) { show('library'); connect(savedPin); }
+if (store.get('token', null) || savedPin) { show('library'); connect(savedPin || ''); }
 else show('login');
