@@ -30,8 +30,8 @@ let config = {};
 try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { /* первый запуск */ }
 if (!/^\d{6}$/.test(String(config.pin || ''))) config.pin = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 if (process.env.PIN) config.pin = String(process.env.PIN);
-const HTTPS_PORT = Number(process.env.HTTPS_PORT || config.httpsPort || 8443);
-const HTTP_PORT = Number(process.env.HTTP_PORT || config.httpPort || 8080);
+let HTTPS_PORT = Number(process.env.HTTPS_PORT || config.httpsPort || 8443);
+let HTTP_PORT = Number(process.env.HTTP_PORT || config.httpPort || 8080);
 const NO_BROWSER = !!process.env.NO_BROWSER;
 const TEST_SOURCE = !!process.env.TEST_SOURCE; // тестовая картинка вместо экрана
 
@@ -437,15 +437,63 @@ function main() {
     }
   }, 5000);
 
-  httpsServer.on('error', (e) => { console.log('Ошибка HTTPS-сервера:', e.message); process.exit(1); });
-  httpServer.on('error', (e) => console.log('Ошибка HTTP-сервера:', e.message));
-  httpsServer.listen(HTTPS_PORT, () => {
-    httpServer.listen(HTTP_PORT, () => {
-      input.start();
-      printBanner();
-      openHostWindow();
-    });
+  start(httpsServer, httpServer).catch((e) => {
+    console.log('Не удалось запустить сервер:', e.message);
+    process.exit(1);
   });
+}
+
+// Слушает первый свободный порт начиная с нужного.
+function listenFree(server, port) {
+  return new Promise((resolve, reject) => {
+    const tryPort = (p) => {
+      const onError = (e) => {
+        if (e.code === 'EADDRINUSE' && p < port + 20) tryPort(p + 1);
+        else reject(e);
+      };
+      server.once('error', onError);
+      server.listen(p, () => { server.off('error', onError); resolve(p); });
+    };
+    tryPort(port);
+  });
+}
+
+// Проверяет, не запущен ли уже Cloud Play на этом порту.
+function cloudPlayAlreadyRunning(port) {
+  return new Promise((resolve) => {
+    const req = https.get({ host: '127.0.0.1', port, path: '/', rejectUnauthorized: false, timeout: 2000 }, (res) => {
+      let body = '';
+      res.on('data', (d) => { body += d; if (body.length > 5000) res.destroy(); });
+      res.on('end', () => resolve(body.includes('Cloud Play')));
+      res.on('close', () => resolve(body.includes('Cloud Play')));
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function start(httpsServer, httpServer) {
+  const wanted = HTTPS_PORT;
+  if (await cloudPlayAlreadyRunning(wanted)) {
+    console.log('');
+    console.log('  Cloud Play уже запущен в другом окне.');
+    console.log('  Закрой старое чёрное окно Cloud Play и запусти start.bat ещё раз.');
+    console.log('  Если старого окна не видно: Ctrl+Shift+Esc (Диспетчер задач) ->');
+    console.log('  найди «Node.js JavaScript Runtime» -> «Снять задачу».');
+    console.log('');
+    process.exit(1);
+  }
+  HTTPS_PORT = await listenFree(httpsServer, wanted);
+  try { HTTP_PORT = await listenFree(httpServer, HTTP_PORT); } catch (e) { console.log('HTTP-сервер не запустился:', e.message); }
+  httpsServer.on('error', (e) => console.log('Ошибка HTTPS-сервера:', e.message));
+  httpServer.on('error', (e) => console.log('Ошибка HTTP-сервера:', e.message));
+  if (HTTPS_PORT !== wanted) {
+    console.log(`Порт ${wanted} занят другой программой, поэтому Cloud Play работает на порту ${HTTPS_PORT}.`);
+    console.log(`В адресе на телефоне обязательно указывай :${HTTPS_PORT}`);
+  }
+  input.start();
+  printBanner();
+  openHostWindow();
 }
 
 function printBanner() {
