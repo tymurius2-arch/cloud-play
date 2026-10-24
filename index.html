@@ -11,6 +11,7 @@
 <title>Cloud Play</title>
 <meta name="description" content="Играй прямо в приложении на телефоне, планшете или ноутбуке. Встроенные игры, облачные сервисы и игры со своего ПК со Steam.">
 <link rel="manifest" href="manifest.webmanifest">
+<script src="games/retro/db.js" id="retroDbScript" async></script>
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
@@ -26,7 +27,7 @@
   .hidden { display: none !important; }
   .muted { color: var(--muted); }
 
-  header { position: sticky; top: 0; z-index: 10; background: #0b0f1eee; backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+  header { position: sticky; top: 0; z-index: 10; background: #0b0f1e; border-bottom: 1px solid var(--line);
     padding: calc(10px + env(safe-area-inset-top)) 16px 0; }
   .head-row { display: flex; align-items: center; gap: 12px; width: min(1100px, 100%); margin: 0 auto; }
   .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; white-space: nowrap; }
@@ -271,7 +272,6 @@
 </div>
 <div id="toast" class="hidden"></div>
 
-<script src="games/retro/db.js"></script>
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
@@ -370,11 +370,12 @@ addEventListener('popstate', () => closeGame(true)); // кнопка «Наза�
 
 
 // ---------- Ретро ----------
-const SYS = RetroDB.SYSTEMS;
+let SYS = {};
 const fmtSize = (b) => b > 1e9 ? (b / 1e9).toFixed(1) + ' ГБ' : b > 1e6 ? (b / 1e6).toFixed(1) + ' МБ' : Math.max(1, Math.round(b / 1e3)) + ' КБ';
-$('sysChips').innerHTML = Object.values(SYS).map((x) => `<span class="chip">${x.emoji} ${x.name}${x.ext.length ? ` <span class="x">.${x.ext.join(' .')}</span>` : ' <span class="x">.zip</span>'}</span>`).join('');
+
 
 async function renderRetro() {
+  if (!window.RetroDB) return;
   let list = [];
   try { list = await RetroDB.list(); } catch (e) { console.warn(e); }
   const grid = $('retroGrid');
@@ -397,7 +398,14 @@ async function renderRetro() {
     grid.appendChild(t);
   }
 }
-renderRetro();
+// Библиотека ретро-игр подгружается отдельно и не задерживает открытие приложения.
+function initRetro() {
+  SYS = RetroDB.SYSTEMS;
+  $('sysChips').innerHTML = Object.values(SYS).map((x) => `<span class="chip">${x.emoji} ${x.name}${x.ext.length ? ` <span class="x">.${x.ext.join(' .')}</span>` : ' <span class="x">.zip</span>'}</span>`).join('');
+  renderRetro();
+}
+if (window.RetroDB) initRetro();
+else document.getElementById('retroDbScript').addEventListener('load', initRetro);
 
 function askSystem(fileName) {
   return new Promise((resolve) => {
@@ -569,7 +577,10 @@ function toast(text, ms) {
   $('toast').textContent = text; $('toast').classList.remove('hidden');
   clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.add('hidden'), ms || 3000);
 }
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+// Регистрируем после загрузки, чтобы не мешать первому открытию.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 </script>
 </body>
 </html>
