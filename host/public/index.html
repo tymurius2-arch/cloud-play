@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cloud Play">
+<title>Cloud Play</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Вход -->
+<section id="login" class="screen">
+  <div class="login-box">
+    <div class="logo">☁️ Cloud <span>Play</span></div>
+    <p class="muted">Играй в игры со своего компьютера на любом устройстве.</p>
+    <label for="pinInput">PIN-код с экрана компьютера</label>
+    <input id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000 000">
+    <button id="loginBtn" class="primary">Подключиться</button>
+    <p id="loginError" class="error"></p>
+  </div>
+</section>
+
+<!-- Библиотека -->
+<section id="library" class="screen hidden">
+  <header class="topbar">
+    <div class="logo small">☁️ Cloud <span>Play</span></div>
+    <div class="pc" id="pcName"></div>
+    <input id="search" type="search" placeholder="Поиск игры…">
+    <button id="settingsBtn" class="icon" title="Настройки">⚙️</button>
+  </header>
+  <div class="quick">
+    <button class="tile-btn" id="desktopBtn"><span>🖥️</span>Рабочий стол</button>
+    <button class="tile-btn" id="bigPictureBtn"><span>🎮</span>Steam Big Picture</button>
+  </div>
+  <h2 id="libTitle">Мои игры</h2>
+  <div id="games" class="grid"></div>
+  <p id="libEmpty" class="muted hidden"></p>
+</section>
+
+<!-- Настройки -->
+<div id="settings" class="modal hidden">
+  <div class="modal-box">
+    <h2>Настройки</h2>
+    <label>Качество картинки
+      <select id="setBitrate">
+        <option value="5">Экономное (5 Мбит/с)</option>
+        <option value="10">Хорошее (10 Мбит/с)</option>
+        <option value="20">Отличное (20 Мбит/с)</option>
+        <option value="35">Максимальное (35 Мбит/с)</option>
+        <option value="60">Ультра (60 Мбит/с, кабель)</option>
+      </select>
+    </label>
+    <label>Разрешение
+      <select id="setHeight">
+        <option value="0">Как на компьютере</option>
+        <option value="1440">1440p</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="540">540p</option>
+      </select>
+    </label>
+    <label>Кадров в секунду
+      <select id="setFps">
+        <option value="60">60</option>
+        <option value="30">30</option>
+      </select>
+    </label>
+    <label>Кодек видео
+      <select id="setCodec">
+        <option value="h264">H.264 (лучше для телефонов)</option>
+        <option value="vp9">VP9</option>
+        <option value="av1">AV1 (новые видеокарты)</option>
+        <option value="vp8">VP8</option>
+      </select>
+    </label>
+    <label>Касание экрана
+      <select id="setTouch">
+        <option value="touchpad">Как тачпад ноутбука</option>
+        <option value="direct">Прямое нажатие</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="setVpad"> Геймпад на экране</label>
+    <label class="check"><input type="checkbox" id="setLock"> Захватывать мышь (для шутеров)</label>
+    <label class="check"><input type="checkbox" id="setStats"> Показывать задержку и FPS</label>
+    <div class="row">
+      <button id="logoutBtn">Выйти</button>
+      <button id="settingsClose" class="primary">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- Игра -->
+<section id="stream" class="screen hidden">
+  <video id="video" playsinline autoplay></video>
+  <div id="touchLayer"></div>
+  <div id="loading"><div class="spinner"></div><div id="loadingText">Подключаюсь…</div></div>
+  <div id="stats" class="hidden"></div>
+  <button id="soundBtn" class="hidden">🔇 Нажми, чтобы включить звук</button>
+
+  <div id="vpad" class="hidden">
+    <div class="stick" id="stickL" data-axis="0"><div class="knob"></div></div>
+    <div class="stick" id="stickR" data-axis="2"><div class="knob"></div></div>
+    <div class="abxy">
+      <div class="pbtn y" data-b="3">Y</div>
+      <div class="pbtn x" data-b="2">X</div>
+      <div class="pbtn b" data-b="1">B</div>
+      <div class="pbtn a" data-b="0">A</div>
+    </div>
+    <div class="dpad">
+      <div class="pbtn up" data-b="12">▲</div>
+      <div class="pbtn left" data-b="14">◀</div>
+      <div class="pbtn right" data-b="15">▶</div>
+      <div class="pbtn down" data-b="13">▼</div>
+    </div>
+    <div class="pbtn shoulder lt" data-b="6">LT</div>
+    <div class="pbtn shoulder lb" data-b="4">LB</div>
+    <div class="pbtn shoulder rt" data-b="7">RT</div>
+    <div class="pbtn shoulder rb" data-b="5">RB</div>
+    <div class="pbtn small back" data-b="8">⧉</div>
+    <div class="pbtn small start" data-b="9">☰</div>
+  </div>
+
+  <button id="menuBtn" title="Меню">☰</button>
+  <div id="menu" class="hidden">
+    <button data-act="keyboard">⌨️ Клавиатура</button>
+    <button data-act="vpad">🎮 Геймпад на экране</button>
+    <button data-act="touch">👆 Режим касания: <b id="touchModeName"></b></button>
+    <button data-act="esc">Esc</button>
+    <button data-act="alttab">Alt + Tab</button>
+    <button data-act="win">⊞ Win</button>
+    <button data-act="fullscreen">⛶ Во весь экран</button>
+    <button data-act="stats">📊 Задержка и FPS</button>
+    <button data-act="altf4" class="danger">✖ Закрыть игру (Alt+F4)</button>
+    <button data-act="exit" class="danger">⏏ Выйти в библиотеку</button>
+  </div>
+  <input id="kbd" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+</section>
+
+<div id="toast" class="hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

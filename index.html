@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Play</title>
+<meta name="description" content="Свой облачный гейминг: играй в игры со своего компьютера и Steam на телефоне, планшете, ноутбуке и телевизоре.">
+<link rel="icon" href="icon.svg">
+<style>
+  :root {
+    --bg: #0b0f1e; --panel: #151b33; --line: #ffffff1a; --text: #e8ecff; --muted: #9aa4c7;
+    --accent: #6ee7ff; --accent2: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { width: min(1040px, 100%); margin: 0 auto; padding: 0 16px; }
+  .hero { padding: 72px 0 56px; text-align: center;
+    background: radial-gradient(circle at 20% 0%, #1d2b5c 0%, transparent 55%), radial-gradient(circle at 90% 30%, #3b1d5c 0%, transparent 50%); }
+  .logo { font-size: clamp(40px, 8vw, 68px); font-weight: 800; letter-spacing: -1.5px; margin: 0; }
+  .logo span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: clamp(17px, 2.6vw, 21px); color: var(--muted); max-width: 640px; margin: 14px auto 28px; }
+  .btn { display: inline-block; padding: 14px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; margin: 6px; }
+  .btn.main { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06132b; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: #ffffff08; }
+  .devices { margin-top: 26px; font-size: 30px; letter-spacing: 12px; }
+  h2 { font-size: 26px; margin: 56px 0 18px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .card h3 { margin: 6px 0; font-size: 18px; }
+  .card p { margin: 0; color: var(--muted); }
+  .card .ic { font-size: 28px; }
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 12px; }
+  ol.steps li { counter-increment: s; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 16px 64px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 16px; top: 14px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #06132b; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  ol.steps b { color: var(--text); }
+  ol.steps li { color: var(--muted); }
+  code { background: #ffffff14; padding: 2px 6px; border-radius: 6px; color: var(--text); }
+  .connect { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .connect input { flex: 1; min-width: 200px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .connect button { padding: 14px 22px; border: 0; border-radius: 12px; font: inherit; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #06132b; cursor: pointer; }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+  details summary { cursor: pointer; font-weight: 700; }
+  details p, details ul { color: var(--muted); margin: 10px 0 0; }
+  footer { color: var(--muted); text-align: center; padding: 48px 0 32px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <div class="wrap">
+      <h1 class="logo">☁️ Cloud <span>Play</span></h1>
+      <p class="lead">Свой облачный гейминг. Твой компьютер со Steam запускает игру, а ты играешь на телефоне, планшете, ноутбуке или телевизоре.</p>
+      <a class="btn main" href="https://github.com/tymurius2-arch/cloud-play/archive/refs/heads/main.zip">⬇ Скачать для Windows</a>
+      <a class="btn ghost" href="#connect">Подключиться к ПК</a>
+      <div class="devices">📱 💻 📺 🎮</div>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <h2>Что умеет</h2>
+    <div class="cards">
+      <div class="card"><div class="ic">🎮</div><h3>Вся библиотека Steam</h3><p>Игры с компьютера появляются сами, с обложками. Нажал на игру, и она запустилась.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Быстро</h3><p>Видео идёт по WebRTC с аппаратным кодированием H.264. До 60 кадров в секунду.</p></div>
+      <div class="card"><div class="ic">📱</div><h3>Любое устройство</h3><p>Работает в браузере: Android, iPhone, iPad, ноутбук, Smart TV. Ничего устанавливать не нужно.</p></div>
+      <div class="card"><div class="ic">🕹️</div><h3>Любое управление</h3><p>Геймпад на экране, настоящий геймпад, клавиатура и мышь, режим тачпада.</p></div>
+      <div class="card"><div class="ic">🔊</div><h3>Звук</h3><p>Звук компьютера передаётся в стерео вместе с картинкой.</p></div>
+      <div class="card"><div class="ic">🔒</div><h3>Только для тебя</h3><p>Вход по PIN-коду. Всё работает внутри твоей сети, без чужих серверов.</p></div>
+    </div>
+
+    <h2>Как начать</h2>
+    <ol class="steps">
+      <li>Установи <b>Node.js</b> (кнопка «LTS») с сайта <a href="https://nodejs.org/" target="_blank" rel="noopener">nodejs.org</a>. Это один раз.</li>
+      <li><a href="https://github.com/tymurius2-arch/cloud-play/archive/refs/heads/main.zip">Скачай Cloud Play</a> и распакуй архив, например на рабочий стол.</li>
+      <li>Открой папку и дважды нажми <b>start.bat</b>. Если Windows спросит про брандмауэр, нажми <b>«Разрешить доступ»</b>.</li>
+      <li>В чёрном окне появятся <b>PIN-код</b> и адрес вида <code>https://192.168.1.5:8443</code>. Откроется маленькое окно трансляции, его можно свернуть.</li>
+      <li>На телефоне (в той же сети Wi-Fi) открой этот адрес. Браузер скажет, что сайт «небезопасный»: нажми <b>«Дополнительно» → «Перейти на сайт»</b>. Это нормально: сертификат твой собственный.</li>
+      <li>Введи PIN, выбери игру и играй! Совет: добавь страницу на главный экран телефона, тогда она откроется на весь экран, как приложение.</li>
+    </ol>
+
+    <h2 id="connect">Подключиться к своему ПК</h2>
+    <div class="card">
+      <p>Введи адрес компьютера из окна Cloud Play (только цифры, например <code>192.168.1.5</code>):</p>
+      <form class="connect" id="connectForm">
+        <input id="ip" placeholder="192.168.1.5" inputmode="decimal" autocomplete="off">
+        <button type="submit">Открыть</button>
+      </form>
+    </div>
+
+    <h2>Частые вопросы</h2>
+    <details><summary>Почему игра идёт с моего компьютера, а не из «настоящего облака»?</summary>
+      <p>Облачные сервисы (GeForce Now и подобные) держат тысячи мощных компьютеров с видеокартами, и это стоит больших денег. Cloud Play превращает в облако твой собственный ПК. Поэтому это бесплатно и работают все твои игры.</p></details>
+    <details><summary>Картинка чёрная или игра не показывается</summary>
+      <p>Поставь в настройках игры режим экрана <b>«Оконный без рамки»</b> (Borderless / Windowed fullscreen) вместо «Полный экран».</p></details>
+    <details><summary>Мышь или клавиатура не работают в игре</summary>
+      <ul>
+        <li>Если игра запущена «от имени администратора», запусти <code>start.bat</code> тоже от имени администратора.</li>
+        <li>Включи в настройках Cloud Play «Захватывать мышь» для шутеров.</li>
+      </ul></details>
+    <details><summary>Как работает геймпад?</summary>
+      <p>Сейчас кнопки геймпада превращаются в клавиши и мышь: левый стик = WASD, правый стик = мышь, RT = выстрел (левая кнопка), LT = прицел (правая кнопка), A = пробел, B = C, X = R, Y = E, LB = Q, RB = F, Start = Esc, Back = Tab, крестовина = стрелки. Эмуляция настоящего Xbox-геймпада будет следующим шагом.</p></details>
+    <details><summary>Можно играть не дома, через интернет?</summary>
+      <p>Пока Cloud Play работает в домашней сети. Через интернет можно уже сейчас с бесплатной программой <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a>: установи её на компьютер и телефон и открывай адрес компьютера из Tailscale.</p></details>
+    <details><summary>Тормозит или картинка «мыльная»</summary>
+      <ul>
+        <li>Подключи компьютер к роутеру кабелем, а телефон к Wi-Fi 5 ГГц.</li>
+        <li>В настройках (⚙️) уменьши качество или разрешение.</li>
+        <li>Включи «Задержка и FPS» в меню, чтобы видеть, что происходит.</li>
+      </ul></details>
+  </main>
+
+  <footer>Cloud Play · <a href="https://github.com/tymurius2-arch/cloud-play">исходный код на GitHub</a></footer>
+
+<script>
+  document.getElementById('connectForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var ip = document.getElementById('ip').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (!ip) return;
+    if (!/:\d+$/.test(ip)) ip += ':8443';
+    try { localStorage.setItem('cp.lastIp', ip); } catch (err) {}
+    location.href = 'https://' + ip + '/';
+  });
+  try { var last = localStorage.getItem('cp.lastIp'); if (last) document.getElementById('ip').value = last.replace(/:8443$/, ''); } catch (err) {}
+</script>
+</body>
+</html>
