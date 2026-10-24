@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ретро-игра</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05070f; color: #e8ecff; overflow: hidden; font: 16px system-ui, sans-serif; }
+  #game { position: fixed; inset: 0; }
+  #msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px; color: #9aa4c7; }
+  #msg b { color: #fff; font-size: 20px; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="msg"><b>Загружаю игру…</b><span>Первый запуск консоли скачивает эмулятор (1–20 МБ). Потом он работает без интернета.</span></div>
+<script src="db.js"></script>
+<script>
+'use strict';
+(async function () {
+  const id = new URLSearchParams(location.search).get('id');
+  const msg = document.getElementById('msg');
+  const fail = (text) => { msg.innerHTML = '<b>Не получилось открыть игру</b><span></span>'; msg.querySelector('span').textContent = text; };
+  let item;
+  try { item = await RetroDB.get(id); } catch (e) { return fail('Не удалось прочитать библиотеку: ' + e.message); }
+  if (!item) return fail('Игра не найдена в библиотеке.');
+
+  // Числовой id для настроек эмулятора.
+  let hash = 0;
+  for (const ch of item.id) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+
+  window.EJS_player = '#game';
+  window.EJS_core = item.system;
+  window.EJS_gameUrl = new File([item.blob], item.fileName);
+  window.EJS_gameName = 'cp-' + item.id;
+  window.EJS_gameID = Math.abs(hash);
+  window.EJS_pathtodata = 'https://cdn.emulatorjs.org/4.2.3/data/';
+  window.EJS_language = 'ru-RU';
+  window.EJS_startOnLoaded = true;
+  window.EJS_color = '#6ee7ff';
+  window.EJS_backgroundColor = '#05070f';
+  window.EJS_CacheLimit = 0; // игра уже лежит в нашей библиотеке, второй копии не нужно
+  const touchScreen = navigator.maxTouchPoints > 0 || matchMedia('(any-pointer: coarse)').matches;
+  // Кнопки на экране включаем на любом сенсорном экране (iPad тоже притворяется компьютером).
+  window.EJS_defaultOptions = { 'save-save-interval': '30', 'virtual-gamepad': touchScreen ? 'enabled' : 'disabled' };
+  window.EJS_ready = () => { msg.remove(); };
+  window.EJS_onGameStart = () => {
+    // На телефоне сразу показываем кнопки на экране (эмулятор сам ждёт первого касания).
+    const pads = navigator.getGamepads ? [...navigator.getGamepads()].some(Boolean) : false;
+    if (touchScreen && !pads && window.EJS_emulator) {
+      try { EJS_emulator.touch = true; EJS_emulator.toggleVirtualGamepad(true); EJS_emulator.handleResize(); } catch { /* старая версия */ }
+    }
+    RetroDB.update(item.id, { lastPlayed: Date.now() }).catch(() => {});
+  };
+
+  const s = document.createElement('script');
+  s.src = window.EJS_pathtodata + 'loader.js';
+  s.onerror = () => fail('Нет интернета для первого запуска этой консоли. Подключись к интернету один раз, потом игра будет работать и без него.');
+  document.body.appendChild(s);
+
+  // Приложение просит сохраниться перед выходом из игры.
+  addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'cp-save') return;
+    try { if (window.EJS_emulator && window.EJS_emulator.started) window.EJS_emulator.gameManager.saveSaveFiles(); } catch { /* нечего сохранять */ }
+    e.source.postMessage({ type: 'cp-saved' }, location.origin);
+  });
+  addEventListener('pagehide', () => {
+    try { if (window.EJS_emulator && window.EJS_emulator.started) window.EJS_emulator.gameManager.saveSaveFiles(); } catch { /* нечего сохранять */ }
+  });
+})();
+</script>
+</body>
+</html>

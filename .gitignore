@@ -1,3 +1,5 @@
 node_modules/
 host/data/
 .DS_Store
+Игры для телефона/*
+!Игры для телефона/README.txt

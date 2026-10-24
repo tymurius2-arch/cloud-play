@@ -1,11 +1,12 @@
 // Cloud Play: офлайн-режим для приложения и встроенных игр.
-const CACHE = 'cloud-play-v1';
+const CACHE = 'cloud-play-v2';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'games/shared/pad.js', 'games/shared/game.css',
   'games/racer/', 'games/racer/index.html',
   'games/arena/', 'games/arena/index.html',
   'games/blocks/', 'games/blocks/index.html',
+  'games/retro/db.js', 'games/retro/play.html',
 ];
 
 self.addEventListener('install', (e) => {

@@ -82,11 +82,33 @@
   .connect input { flex: 1; min-width: 180px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
   .connect .btn { margin: 0; }
 
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }
+  .actions .btn { margin: 0; cursor: pointer; }
+  .tile .del { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: #000a; font-size: 14px; z-index: 2; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+  .chip .x { color: var(--muted); font-size: 12px; }
+  .pc-list { display: grid; gap: 8px; margin-top: 12px; }
+  .pc-item { display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .pc-item .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pc-item button { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-weight: 700; }
+  .field { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .field input { flex: 1; min-width: 140px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .bar { height: 8px; border-radius: 99px; background: #ffffff18; overflow: hidden; margin-top: 8px; }
+  .bar div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .2s; }
+  .modal { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; background: #000a; padding: 16px; }
+  .modal .box { width: min(440px, 100%); max-height: 90vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+  .modal h3 { margin: 0 0 6px; }
+  .sys-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .sys-list button { text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px; font-size: 14px; }
+  .sys-list button:hover { border-color: var(--accent); }
+
   /* Плеер */
   #player { position: fixed; inset: 0; z-index: 100; background: #000; }
   #player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
   #closeGame { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); z-index: 2;
     width: 44px; height: 44px; border-radius: 50%; border: 1px solid #ffffff33; background: #000a; font-size: 18px; }
+  #player.retro #closeGame { right: auto; left: calc(8px + env(safe-area-inset-left)); }
   #playerLoading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
   #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 200; background: #151b33f2;
     border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; max-width: calc(100% - 32px); text-align: center; }
@@ -101,6 +123,7 @@
   </div>
   <nav>
     <button data-tab="games" class="on">🎮 Игры</button>
+    <button data-tab="retro">🕹️ Ретро</button>
     <button data-tab="cloud">☁️ Облако</button>
     <button data-tab="pc">🖥️ Мой ПК</button>
   </nav>
@@ -123,6 +146,61 @@
     <h2>Наши игры</h2>
     <p class="muted">Игры, которые мы сделали раньше. Открываются прямо в приложении (нужен интернет).</p>
     <div class="grid" id="ours"></div>
+  </section>
+
+  <!-- Ретро -->
+  <section id="tab-retro" class="hidden">
+    <h2>Ретро-консоли</h2>
+    <p class="muted">Игры для старых приставок идут прямо на телефоне: плавно, 60 кадров в секунду, без компьютера и без интернета. Файлы игр хранятся только внутри Cloud Play.</p>
+    <div class="actions">
+      <label class="btn" for="romFile">📱 Добавить с телефона</label>
+      <input type="file" id="romFile" multiple hidden>
+      <button class="btn ghost" id="fromPcBtn">🖥️ Загрузить с компьютера</button>
+    </div>
+
+    <div id="pcPanel" class="card hidden" style="margin-bottom:16px">
+      <b>Игры с компьютера по Wi-Fi</b>
+      <p class="muted" style="margin:4px 0 0;font-size:14px">На компьютере запусти Cloud Play (start.bat) и положи файлы игр в папку <b>«Игры для телефона»</b> рядом со start.bat. Телефон и компьютер должны быть в одной сети Wi-Fi.</p>
+      <div class="field">
+        <input id="pcIp" placeholder="Адрес ПК, например 192.168.1.5" inputmode="decimal" autocomplete="off">
+        <input id="pcPin" placeholder="PIN-код" inputmode="numeric" autocomplete="off" style="max-width:140px">
+        <button class="btn" id="pcConnect" style="margin:0">Показать игры</button>
+      </div>
+      <div id="pcStatus" class="muted" style="margin-top:10px;font-size:14px"></div>
+      <div id="pcList" class="pc-list"></div>
+    </div>
+
+    <div id="importBox" class="note hidden"><span id="importText"></span><div class="bar"><div id="importBar"></div></div></div>
+
+    <div class="grid" id="retroGrid"></div>
+    <p id="retroEmpty" class="muted">Здесь пока пусто. Добавь первую игру кнопкой выше.</p>
+
+    <h2>Какие консоли работают</h2>
+    <p class="muted">Лучше всего: NES/Денди, Super Nintendo, Game Boy, GBA, Sega. PlayStation 1, Nintendo 64 и DS идут на новых телефонах.</p>
+    <div class="chips" id="sysChips"></div>
+
+    <h2>Где взять игры</h2>
+    <p class="muted">Скачивать чужие игры, которые продаются, незаконно, поэтому вот честные варианты:</p>
+    <div class="cloud">
+      <div class="card">
+        <h3><span class="ic">🆓</span>Бесплатные новые игры</h3>
+        <p>Энтузиасты до сих пор делают игры для старых консолей и раздают их бесплатно и легально.</p>
+        <p>• <a href="https://hh.gbdev.io/" target="_blank" rel="noopener">Homebrew Hub</a>: сотни игр для Game Boy и GBA<br>
+           • itch.io: игры для <a href="https://itch.io/games/free/tag-nes" target="_blank" rel="noopener">NES</a>,
+           <a href="https://itch.io/games/free/tag-gameboy" target="_blank" rel="noopener">Game Boy</a>,
+           <a href="https://itch.io/games/free/tag-game-boy-advance" target="_blank" rel="noopener">GBA</a>,
+           <a href="https://itch.io/games/free/tag-sega-genesis" target="_blank" rel="noopener">Sega</a></p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">💾</span>Свои картриджи и диски</h3>
+        <p>Если есть старые картриджи или диски, их можно скопировать в файл специальным устройством-ридером (например GB Operator для Game Boy) или с диска PS1 на компьютере. Такие копии для себя законны.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">⚔️</span>God of War и PSP / PS2</h3>
+        <p>Старый God of War на iPhone, скорее всего, был с PSP. PSP и PS2 слишком тяжёлые для браузера, поэтому для них есть отдельное бесплатное приложение PPSSPP, а игры для него копируются со своих UMD-дисков.</p>
+        <a class="btn ghost" href="https://apps.apple.com/app/ppsspp-psp-emulator/id6496972903" target="_blank" rel="noopener">PPSSPP в App Store</a>
+      </div>
+    </div>
   </section>
 
   <!-- Облако -->
@@ -183,8 +261,17 @@
   <iframe id="frame" allow="gamepad; fullscreen; autoplay; accelerometer; gyroscope; clipboard-write" allowfullscreen></iframe>
   <button id="closeGame" title="Выйти из игры">✕</button>
 </div>
+<div id="sysModal" class="modal hidden">
+  <div class="box">
+    <h3>Для какой это консоли?</h3>
+    <p class="muted" id="sysModalFile" style="margin:0;font-size:14px;word-break:break-all"></p>
+    <div class="sys-list" id="sysModalList"></div>
+    <button class="btn ghost" id="sysCancel" style="width:100%;margin-top:12px">Отмена</button>
+  </div>
+</div>
 <div id="toast" class="hidden"></div>
 
+<script src="games/retro/db.js"></script>
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
@@ -250,12 +337,25 @@ function openGame(url, game) {
   $('playerLoading').classList.remove('hidden');
   $('frame').onload = () => { $('playerLoading').classList.add('hidden'); try { $('frame').contentWindow.focus(); } catch { /* другой сайт */ } };
   $('frame').src = url;
+  $('player').classList.toggle('retro', url.includes('games/retro/'));
   $('player').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   history.pushState({ game: true }, '');
 }
-function closeGame(fromHistory) {
-  if ($('player').classList.contains('hidden')) return;
+let closing = false;
+async function closeGame(fromHistory) {
+  if ($('player').classList.contains('hidden') || closing) return;
+  closing = true;
+  // Ретро-игру сначала просим сохраниться.
+  if ($('frame').src.includes('games/retro/')) {
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 800);
+      const on = (e) => { if (e.data && e.data.type === 'cp-saved') { clearTimeout(t); removeEventListener('message', on); setTimeout(resolve, 400); } };
+      addEventListener('message', on);
+      try { $('frame').contentWindow.postMessage({ type: 'cp-save' }, location.origin); } catch { resolve(); }
+    });
+  }
+  closing = false;
   $('frame').src = 'about:blank';
   $('player').classList.add('hidden');
   document.body.style.overflow = '';
@@ -263,14 +363,179 @@ function closeGame(fromHistory) {
   if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   if (!fromHistory && history.state && history.state.game) history.back();
   renderGames();
+  renderRetro();
 }
 $('closeGame').onclick = () => closeGame(false);
 addEventListener('popstate', () => closeGame(true)); // кнопка «Назад» на телефоне
 
+
+// ---------- Ретро ----------
+const SYS = RetroDB.SYSTEMS;
+const fmtSize = (b) => b > 1e9 ? (b / 1e9).toFixed(1) + ' ГБ' : b > 1e6 ? (b / 1e6).toFixed(1) + ' МБ' : Math.max(1, Math.round(b / 1e3)) + ' КБ';
+$('sysChips').innerHTML = Object.values(SYS).map((x) => `<span class="chip">${x.emoji} ${x.name}${x.ext.length ? ` <span class="x">.${x.ext.join(' .')}</span>` : ' <span class="x">.zip</span>'}</span>`).join('');
+
+async function renderRetro() {
+  let list = [];
+  try { list = await RetroDB.list(); } catch (e) { console.warn(e); }
+  const grid = $('retroGrid');
+  grid.innerHTML = '';
+  $('retroEmpty').classList.toggle('hidden', list.length > 0);
+  for (const r of list) {
+    const sys = SYS[r.system] || { name: r.system, emoji: '🎮', color: '#334155' };
+    const t = tile({ id: r.id, name: r.name, sub: `${sys.name} · ${fmtSize(r.size)}`, emoji: sys.emoji,
+      bg: `linear-gradient(160deg, ${sys.color}, #0b0f1e 90%)` }, () => openGame('games/retro/play.html?id=' + encodeURIComponent(r.id), { landscape: true }));
+    const del = document.createElement('span');
+    del.className = 'del'; del.textContent = '🗑'; del.title = 'Удалить';
+    del.style.cssText = 'display:grid;place-items:center;cursor:pointer';
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Удалить «${r.name}» из приложения?`)) return;
+      await RetroDB.remove(r.id);
+      renderRetro();
+    };
+    t.appendChild(del);
+    grid.appendChild(t);
+  }
+}
+renderRetro();
+
+function askSystem(fileName) {
+  return new Promise((resolve) => {
+    $('sysModalFile').textContent = fileName;
+    const listEl = $('sysModalList');
+    listEl.innerHTML = '';
+    for (const [id, x] of Object.entries(SYS)) {
+      const b = document.createElement('button');
+      b.textContent = `${x.emoji} ${x.name}`;
+      b.onclick = () => { $('sysModal').classList.add('hidden'); resolve(id); };
+      listEl.appendChild(b);
+    }
+    $('sysCancel').onclick = () => { $('sysModal').classList.add('hidden'); resolve(null); };
+    $('sysModal').classList.remove('hidden');
+  });
+}
+
+async function importBlob(fileName, blob) {
+  let system = RetroDB.detect(fileName);
+  if (system && system.startsWith('unsupported:')) {
+    toast(`«${fileName}» — это игра для ${system.split(':')[1]}. Такая консоль в браузере не работает.`, 6000);
+    return false;
+  }
+  if (system === 'psx-cue') {
+    toast('Для PlayStation нужен один файл .chd или .pbp (файлы .cue + .bin можно сжать в .chd программой chdman).', 7000);
+    return false;
+  }
+  if (!system) system = await askSystem(fileName);
+  if (!system) return false;
+  try {
+    await RetroDB.add({ fileName, system, blob });
+  } catch (e) {
+    toast('Не удалось сохранить: ' + (e.message || 'не хватает места'), 6000);
+    return false;
+  }
+  return true;
+}
+
+function progress(text, frac) {
+  $('importBox').classList.toggle('hidden', text === null);
+  if (text === null) return;
+  $('importText').textContent = text;
+  $('importBar').style.width = Math.round((frac || 0) * 100) + '%';
+}
+
+$('romFile').addEventListener('change', async () => {
+  const files = [...$('romFile').files];
+  $('romFile').value = '';
+  let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    progress(`Добавляю ${files[i].name}…`, (i + 1) / files.length);
+    if (await importBlob(files[i].name, files[i])) ok++;
+  }
+  progress(null);
+  if (ok) toast(ok === 1 ? 'Игра добавлена!' : `Добавлено игр: ${ok}`);
+  renderRetro();
+});
+
+// Загрузка с компьютера по Wi-Fi
+function pcBase() {
+  let ip = $('pcIp').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!ip) return null;
+  if (!/:\d+$/.test(ip)) ip += ':8443';
+  return 'https://' + ip;
+}
+$('fromPcBtn').onclick = () => {
+  $('pcPanel').classList.toggle('hidden');
+  try {
+    const ip = localStorage.getItem('cp.lastIp'); if (ip && !$('pcIp').value) $('pcIp').value = ip.replace(/:8443$/, '');
+    const pin = localStorage.getItem('cp.pcPin'); if (pin && !$('pcPin').value) $('pcPin').value = pin;
+  } catch { /* нет */ }
+};
+$('pcConnect').onclick = async () => {
+  const base = pcBase();
+  const pin = $('pcPin').value.replace(/\D/g, '');
+  if (!base || pin.length !== 6) { $('pcStatus').textContent = 'Введи адрес компьютера и PIN-код (6 цифр) из окна Cloud Play.'; return; }
+  try { localStorage.setItem('cp.lastIp', base.replace('https://', '')); localStorage.setItem('cp.pcPin', pin); } catch { /* нет */ }
+  $('pcStatus').textContent = 'Подключаюсь…';
+  $('pcList').innerHTML = '';
+  let res;
+  try {
+    res = await fetch(base + '/api/roms', { headers: { 'X-PIN': pin } });
+  } catch (e) {
+    $('pcStatus').innerHTML = '';
+    const a = document.createElement('a'); a.href = base + '/'; a.target = '_blank'; a.rel = 'noopener'; a.textContent = base;
+    $('pcStatus').append('Компьютер не отвечает. Проверь, что Cloud Play на ПК запущен. Если запущен: открой ', a,
+      ', нажми «Дополнительно» → «Перейти на сайт» (это нужно один раз), вернись сюда и нажми «Показать игры» ещё раз.');
+    return;
+  }
+  if (res.status === 401) { $('pcStatus').textContent = 'Неверный PIN-код.'; return; }
+  if (!res.ok) { $('pcStatus').textContent = 'Ошибка ' + res.status + '. Обнови программу на компьютере.'; return; }
+  const data = await res.json();
+  if (!data.files.length) { $('pcStatus').textContent = `Папка «Игры для телефона» на компьютере пустая. Положи туда файлы игр: ${data.folder}`; return; }
+  $('pcStatus').textContent = `Файлы на компьютере (${data.files.length}):`;
+  for (const f of data.files) {
+    const row = document.createElement('div');
+    row.className = 'pc-item';
+    const sys = RetroDB.detect(f.name);
+    const em = sys && SYS[sys] ? SYS[sys].emoji : '📄';
+    row.innerHTML = '<span></span><span class="n"></span><span class="muted"></span><button>Загрузить</button>';
+    row.children[0].textContent = em;
+    row.children[1].textContent = f.name;
+    row.children[2].textContent = fmtSize(f.size);
+    row.children[3].onclick = () => downloadFromPc(base, pin, f, row.children[3]);
+    $('pcList').appendChild(row);
+  }
+};
+
+async function downloadFromPc(base, pin, f, btn) {
+  btn.disabled = true;
+  try {
+    const res = await fetch(base + '/api/roms/file?name=' + encodeURIComponent(f.name), { headers: { 'X-PIN': pin } });
+    if (!res.ok) throw new Error('ошибка ' + res.status);
+    const total = Number(res.headers.get('Content-Length')) || f.size;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length;
+      progress(`Загружаю ${f.name}: ${fmtSize(got)} из ${fmtSize(total)}`, got / total);
+    }
+    progress(null);
+    if (await importBlob(f.name, new Blob(chunks))) { toast('Готово! Игра в библиотеке.'); btn.textContent = '✓'; }
+    else btn.disabled = false;
+    renderRetro();
+  } catch (e) {
+    progress(null);
+    btn.disabled = false;
+    toast('Не удалось загрузить: ' + e.message, 5000);
+  }
+}
+
 // ---------- Вкладки ----------
 function showTab(name) {
   for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.tab === name);
-  for (const s of ['games', 'cloud', 'pc']) $('tab-' + s).classList.toggle('hidden', s !== name);
+  for (const s of ['games', 'retro', 'cloud', 'pc']) $('tab-' + s).classList.toggle('hidden', s !== name);
   try { localStorage.setItem('cp.tab', name); } catch { /* нет */ }
 }
 for (const b of document.querySelectorAll('nav button')) b.onclick = () => showTab(b.dataset.tab);

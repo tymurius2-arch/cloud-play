@@ -16,6 +16,11 @@ const steam = require('./steam');
 const input = require('./input');
 
 const PUBLIC = path.join(__dirname, 'public');
+// Папка, откуда телефон забирает файлы ретро-игр.
+const ROMS_DIR = process.env.ROMS_DIR || path.join(__dirname, '..', 'Игры для телефона');
+try { fs.mkdirSync(ROMS_DIR, { recursive: true }); } catch { /* нет прав */ }
+// Сайт-приложение, которому разрешено забирать игры с этого ПК.
+const APP_ORIGINS = ['https://tymurius2-arch.github.io', ...(process.env.APP_ORIGIN ? [process.env.APP_ORIGIN] : [])];
 const DATA = path.join(__dirname, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -87,10 +92,73 @@ const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon',
 };
 
+function listRoms() {
+  let names = [];
+  try { names = fs.readdirSync(ROMS_DIR); } catch { return []; }
+  const files = [];
+  for (const name of names) {
+    if (name.startsWith('.') || name === 'README.txt') continue;
+    try {
+      const st = fs.statSync(path.join(ROMS_DIR, name));
+      if (st.isFile()) files.push({ name, size: st.size, modified: st.mtimeMs });
+    } catch { /* файл пропал */ }
+  }
+  return files.sort((a, b) => b.modified - a.modified);
+}
+
+function handleRomsApi(req, res, url, p) {
+  const origin = req.headers.origin;
+  const headers = { 'Cache-Control': 'no-store' };
+  if (origin && (APP_ORIGINS.includes(origin) || origin === `https://${req.headers.host}`)) {
+    Object.assign(headers, {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Headers': 'X-PIN',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Private-Network': 'true',
+      'Access-Control-Expose-Headers': 'Content-Length',
+      'Vary': 'Origin',
+    });
+  }
+  if (req.method === 'OPTIONS') { res.writeHead(204, headers); return res.end(); }
+
+  const ip = req.socket.remoteAddress || '';
+  const f = failedLogins.get(ip);
+  if (f && f.until > Date.now()) { res.writeHead(429, headers); return res.end(); }
+  const pin = String(req.headers['x-pin'] || url.searchParams.get('pin') || '');
+  if (pin !== config.pin) {
+    const cnt = f && f.until && f.until <= Date.now() ? 1 : (f ? f.count : 0) + 1;
+    failedLogins.set(ip, { count: cnt, until: cnt >= 5 ? Date.now() + 60000 : 0 });
+    res.writeHead(401, headers); return res.end();
+  }
+  failedLogins.delete(ip);
+
+  if (p === '/api/roms') {
+    res.writeHead(200, { ...headers, 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ folder: ROMS_DIR, files: listRoms().map(({ name, size }) => ({ name, size })) }));
+  }
+  // /api/roms/file?name=...
+  const name = url.searchParams.get('name') || '';
+  if (!name || name !== path.basename(name) || name.startsWith('.')) { res.writeHead(400, headers); return res.end(); }
+  const file = path.join(ROMS_DIR, name);
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404, headers); return res.end(); }
+    res.writeHead(200, {
+      ...headers,
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': st.size,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    });
+    console.log('Отправляю на телефон:', name);
+    fs.createReadStream(file).pipe(res);
+  });
+}
+
 function handleRequest(req, res) {
   let url;
   try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }
-  const p = decodeURIComponent(url.pathname);
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end(); }
+  if (p === '/api/roms' || p === '/api/roms/file') return handleRomsApi(req, res, url, p);
 
   const cover = p.match(/^\/cover\/(\d+)$/);
   if (cover) {
@@ -406,6 +474,10 @@ function printBanner() {
   } else {
     console.log('  Компьютер не подключён к сети.');
   }
+  console.log('');
+  console.log('  Ретро-игры для телефона клади в папку:');
+  console.log('     ' + ROMS_DIR);
+  console.log('  На телефоне: Cloud Play → Ретро → «Загрузить с компьютера».');
   console.log('  Не закрывай это окно, пока играешь.');
   console.log('==============================================');
 }
